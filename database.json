@@ -1,0 +1,32 @@
+{
+    "851328559301656606": {
+        "balance": 4554555429891,
+        "xp": 25,
+        "level": 2,
+        "last_daily": 0,
+        "inventory": {
+            "weapons": [],
+            "animals": []
+        }
+    },
+    "1175398474280353835": {
+        "balance": 555555555693999,
+        "xp": 47,
+        "level": 1,
+        "last_daily": 0,
+        "inventory": {
+            "weapons": [],
+            "animals": []
+        }
+    },
+    "1057373456410345594": {
+        "balance": 6117217272165,
+        "xp": 39,
+        "level": 1,
+        "last_daily": 0,
+        "inventory": {
+            "weapons": [],
+            "animals": []
+        }
+    }
+}
