@@ -634,4 +634,4 @@ async def pet_battle(ctx):
         await msg.edit(content=f"💀 Trận chiến kết thúc quá thảm khốc! **{my_pet}** đã bại trận trước {enemy} và được đưa về trạm y tế dưỡng thương.")
 
 # --- KÍCH HOẠT HỆ THỐNG SÒNG BÀI CASINO ---
-bot.run('token')
+bot.run(token)
