@@ -10,7 +10,7 @@ import time
 
 # --- CẤU HÌNH HỆ THỐNG TỐI CAO ---
 OWNER_ID = 851328559301656606  # ID Chủ sòng của bạn
-TOKEN = os.environ.get('TOKEN')
+token = os.environ.get('TOKEN')
 DB_FILE = "database.json"
 
 intents = discord.Intents.default()
