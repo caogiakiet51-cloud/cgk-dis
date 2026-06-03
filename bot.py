@@ -648,33 +648,31 @@ async def pet_battle(ctx):
         
 # --- LỆNH QUẢN TRỊ: XÓA TIỀN CỦA NGƯỜI CHƠI ---
 @bot.command(name="xoatien")
-@commands.has_permissions(administrator=True) 
-async def xoatien(ctx, member: discord.Member, amount: int = None):
-    # (Phần code xử lý bên dưới giữ nguyên như cũ)
+@commands.has_permissions(administrator=True)
+async def xoatien(ctx, member: discord.Member):
     file_path = 'bank.json'
     
-    # Tạo file nếu chưa tồn tại
-    if not os.path.exists(file_path):
-        with open(file_path, 'w') as f:
-            json.dump({}, f)
-            
+    # Đọc dữ liệu
     with open(file_path, 'r') as f:
         data = json.load(f)
-
+    
     user_id = str(member.id)
-
-    if amount is None:
-        # Nếu không nhập số tiền, xóa sạch về 0
-        data[user_id] = 0
-        await ctx.send(f'✅ Đã xóa sạch số dư của {member.mention}!')
-    else:
-        # Nếu có nhập số tiền, trừ đi số đó
-        if user_id in data:
-            data[user_id] -= amount
-            if data[user_id] < 0: data[user_id] = 0
-            await ctx.send(f'✅ Đã trừ {amount} xu của {member.mention}. Số dư còn lại: {data[user_id]}')
+    
+    if user_id in data:
+        # Cách sửa: Chỉ gán balance về 0, không gán cả user_id = 0
+        if isinstance(data[user_id], dict):
+            data[user_id]['balance'] = 0
         else:
-            await ctx.send('❌ Người dùng này chưa có tài khoản trong hệ thống.')
+            # Trường hợp dữ liệu cũ của bạn chỉ là số đơn thuần
+            data[user_id] = {"balance": 0, "level": 1, "xp": 0}
+            
+        # Lưu lại file
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=4)
+            
+        await ctx.send(f"✅ Đã xóa sạch số dư của {member.mention} về 0.")
+    else:
+        await ctx.send("❌ Người dùng này chưa có tài khoản trong hệ thống.")
 
     # Lưu lại file
     with open(file_path, 'w') as f:
@@ -709,6 +707,36 @@ async def top(ctx):
         msg += f"{i+1}. **{user.name}**: {balance:,} xu\n"
         
     await ctx.send(msg)
+    
+@bot.command(name="give")
+async def give(ctx, member: discord.Member, amount: int):
+    # 1. Kiểm tra số tiền hợp lệ
+    if amount <= 0:
+        return await ctx.send("❌ Số tiền tặng phải lớn hơn 0!")
+    
+    if member.id == ctx.author.id:
+        return await ctx.send("❌ Bạn không thể tự tặng tiền cho chính mình!")
+
+    # 2. Đọc dữ liệu
+    db = load_db()
+    sender_id = str(ctx.author.id)
+    receiver_id = str(member.id)
+    
+    # Đảm bảo sender có tài khoản
+    if sender_id not in db: db[sender_id] = {"balance": 0}
+    # Đảm bảo receiver có tài khoản
+    if receiver_id not in db: db[receiver_id] = {"balance": 0}
+
+    # 3. Kiểm tra số dư người gửi
+    if db[sender_id]["balance"] < amount:
+        return await ctx.send(f"❌ Bạn không đủ tiền! Bạn chỉ có **{db[sender_id]['balance']:,} xu**.")
+
+    # 4. Thực hiện giao dịch (Trừ người gửi - Cộng người nhận)
+    db[sender_id]["balance"] -= amount
+    db[receiver_id]["balance"] += amount
+    save_db(db)
+
+    await ctx.send(f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho {member.mention}!")
 
 # --- KÍCH HOẠT HỆ THỐNG SÒNG BÀI CASINO ---
 bot.run(token)
