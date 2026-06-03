@@ -634,30 +634,38 @@ async def pet_battle(ctx):
         await msg.edit(content=f"💀 Trận chiến kết thúc quá thảm khốc! **{my_pet}** đã bại trận trước {enemy} và được đưa về trạm y tế dưỡng thương.")
         
 # --- LỆNH QUẢN TRỊ: XÓA TIỀN CỦA NGƯỜI CHƠI ---
-def update_user(uid, key, amount, mode="add"):
-    db = load_db() 
-    uid = str(uid)
-    if uid not in db:
-        db[uid] = {"balance": 0}
+@bot.command()
+@commands.has_permissions(administrator=True) 
+async def xoatien(ctx, member: discord.Member, amount: int = None):
+    # Đường dẫn file dữ liệu
+    file_path = 'bank.json'
     
-    if mode == "add":
-        db[uid][key] += amount
-    elif mode == "set":
-        db[uid][key] = amount 
-        
-    save_db(db)
+    # Tạo file nếu chưa tồn tại
+    if not os.path.exists(file_path):
+        with open(file_path, 'w') as f:
+            json.dump({}, f)
+            
+    with open(file_path, 'r') as f:
+        data = json.load(f)
 
-# 2. LỆNH QUẢN TRỊ: XÓA TIỀN (Chỉ Admin dùng được)
-@bot.command(name="xoatien")
-@commands.has_permissions(administrator=True)
-async def xoatien(ctx, member: discord.Member):
-    update_user(member.id, "balance", 0, mode="set")
-    await ctx.send(f"✅ Đã xóa sạch tiền của {member.mention} về 0.")
+    user_id = str(member.id)
 
-@xoatien.error
-async def xoatien_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bạn không có quyền Admin để thực hiện lệnh này!")
+    if amount is None:
+        # Nếu không nhập số tiền, xóa sạch về 0
+        data[user_id] = 0
+        await ctx.send(f'✅ Đã xóa sạch số dư của {member.mention}!')
+    else:
+        # Nếu có nhập số tiền, trừ đi số đó
+        if user_id in data:
+            data[user_id] -= amount
+            if data[user_id] < 0: data[user_id] = 0
+            await ctx.send(f'✅ Đã trừ {amount} xu của {member.mention}. Số dư còn lại: {data[user_id]}')
+        else:
+            await ctx.send('❌ Người dùng này chưa có tài khoản trong hệ thống.')
+
+    # Lưu lại file
+    with open(file_path, 'w') as f:
+        json.dump(data, f)
 
 # 3. LỆNH TỰ XÓA TIỀN CỦA CHÍNH MÌNH
 @bot.command(name="resetme")
