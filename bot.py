@@ -634,10 +634,10 @@ async def pet_battle(ctx):
         await msg.edit(content=f"💀 Trận chiến kết thúc quá thảm khốc! **{my_pet}** đã bại trận trước {enemy} và được đưa về trạm y tế dưỡng thương.")
         
 # --- LỆNH QUẢN TRỊ: XÓA TIỀN CỦA NGƯỜI CHƠI ---
-@bot.command()
+@bot.command(name="xoatien")
 @commands.has_permissions(administrator=True) 
 async def xoatien(ctx, member: discord.Member, amount: int = None):
-    # Đường dẫn file dữ liệu
+    # (Phần code xử lý bên dưới giữ nguyên như cũ)
     file_path = 'bank.json'
     
     # Tạo file nếu chưa tồn tại
