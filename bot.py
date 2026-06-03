@@ -119,6 +119,19 @@ async def add_money(ctx, member: discord.Member = None, amount: int = None):
         return
     update_user(member.id, "balance", amount, mode="add")
     await ctx.send(f"👑 **Nhà Cái Tối Cao** đã bơm **+{amount:,}** xu vào ví của {member.mention}!")
+    
+def check_level_up(uid):
+    db = load_db()
+    uid = str(uid)
+    user = db[uid]
+    needed_xp = 100 * (user['level'] ** 2) # Độ khó tăng dần
+    
+    if user['xp'] >= needed_xp:
+        user['level'] += 1
+        user['xp'] = 0
+        save_db(db)
+        return True, user['level']
+    return False, user['level']
 
 # --- [2] LỆNH XEM SỐ DƯ & LEVEL ---
 @bot.command(name="cash")
