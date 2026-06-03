@@ -632,6 +632,44 @@ async def pet_battle(ctx):
         await msg.edit(content=f"🏆 **{my_pet}** đã hạ gục hoàn toàn {enemy}!\n🎁 Phần thưởng mang về: **+{reward_money:,} xu** và **+{reward_xp} XP** tích lũy.")
     else:
         await msg.edit(content=f"💀 Trận chiến kết thúc quá thảm khốc! **{my_pet}** đã bại trận trước {enemy} và được đưa về trạm y tế dưỡng thương.")
+        
+# --- LỆNH QUẢN TRỊ: ĐẶT LẠI TIỀN ---
+@bot.command(name="setmoney")
+@commands.has_permissions(administrator=True) # Chỉ Admin mới dùng được
+async def setmoney(ctx, member: discord.Member, amount: int):
+    # Cập nhật tiền cho người được chỉ định
+    update_user(member.id, "balance", amount, mode="set")
+    await ctx.send(f"✅ Đã đặt số dư của {member.mention} thành {amount:,} xu.")
+
+# Nếu không có quyền Admin, bot sẽ báo lỗi
+@setmoney.error
+async def setmoney_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ Bạn không có quyền sử dụng lệnh này!")
+        
+# --- LỆNH XEM BẢNG XẾP HẠNG ---
+@bot.command(name="top")
+async def top(ctx):
+    db = load_db()
+    # Chuyển đổi database thành danh sách [ (id, số_tiền), ... ]
+    user_list = []
+    for uid, data in db.items():
+        if isinstance(data, dict) and "balance" in data:
+            user_list.append((uid, data["balance"]))
+    
+    # Sắp xếp theo số tiền giảm dần
+    user_list.sort(key=lambda x: x[1], reverse=True)
+    
+    # Lấy top 5
+    top_5 = user_list[:5]
+    
+    msg = "🏆 **BẢNG XẾP HẠNG GIÀU CÓ** 🏆\n"
+    for i, (uid, balance) in enumerate(top_5):
+        # Lấy tên người dùng từ ID
+        user = await bot.fetch_user(int(uid))
+        msg += f"{i+1}. **{user.name}**: {balance:,} xu\n"
+        
+    await ctx.send(msg)
 
 # --- KÍCH HOẠT HỆ THỐNG SÒNG BÀI CASINO ---
 bot.run(token)
