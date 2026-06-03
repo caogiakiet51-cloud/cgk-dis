@@ -633,19 +633,21 @@ async def pet_battle(ctx):
     else:
         await msg.edit(content=f"💀 Trận chiến kết thúc quá thảm khốc! **{my_pet}** đã bại trận trước {enemy} và được đưa về trạm y tế dưỡng thương.")
         
-# --- LỆNH QUẢN TRỊ: ĐẶT LẠI TIỀN ---
-@bot.command(name="setmoney")
+# --- LỆNH QUẢN TRỊ: XÓA TIỀN CỦA NGƯỜI CHƠI ---
+@bot.command(name="xoatien")
 @commands.has_permissions(administrator=True) # Chỉ Admin mới dùng được
-async def setmoney(ctx, member: discord.Member, amount: int):
-    # Cập nhật tiền cho người được chỉ định
-    update_user(member.id, "balance", amount, mode="set")
-    await ctx.send(f"✅ Đã đặt số dư của {member.mention} thành {amount:,} xu.")
+async def xoatien(ctx, member: discord.Member):
+    # Dùng hàm add tiền hiện có của bạn với giá trị 0 và mode là "set"
+    # Hoặc nếu hàm của bạn chỉ có mode "add", hãy sửa mode thành "set" để ghi đè
+    update_user(member.id, "balance", 0, mode="set")
+    
+    await ctx.send(f"✅ Đã xóa sạch tiền của {member.mention}. Số dư hiện tại: **0 xu**.")
 
-# Nếu không có quyền Admin, bot sẽ báo lỗi
-@setmoney.error
-async def setmoney_error(ctx, error):
-    if isinstance(error, commands.CheckFailure):
-        await ctx.send("❌ Bạn không có quyền sử dụng lệnh này!")
+# Lệnh này dùng để xóa tiền của chính mình (nếu cần)
+@bot.command(name="resetme")
+async def resetme(ctx):
+    update_user(ctx.author.id, "balance", 0, mode="set")
+    await ctx.send(f"✅ {ctx.author.mention}, bạn đã tự xóa sạch số dư của mình!")
         
 # --- LỆNH XEM BẢNG XẾP HẠNG ---
 @bot.command(name="top")
