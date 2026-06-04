@@ -754,4 +754,5 @@ def keep_alive():
     t.start()
     
 # --- KÍCH HOẠT HỆ THỐNG SÒNG BÀI CASINO ---
+keep_alive()
 bot.run(token)
