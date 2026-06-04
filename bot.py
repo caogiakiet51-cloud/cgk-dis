@@ -186,7 +186,7 @@ async def add_money_multi(ctx, *args):
         except:
             fail_list.append(f"❌ {member.name}")
 
-    embed_res = discord.Embed(title="💰 BIÊN LAI CỘNG TIỀN HÀNG LOẠT 💰", color=discord.Color.green())
+    embed_res = discord.Embed(title="👑 **Nhà Cái Tối Cao** đã bơm", color=discord.Color.green())
     embed_res.description = f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
     
     if success_list: 
