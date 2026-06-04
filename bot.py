@@ -1104,15 +1104,15 @@ class OanTuTiView(discord.ui.View):
         self.message = None
 
     async def check_result(self):
-        # Kiểm tra điều kiện: Cả hai người phải chọn xong xuôi
+        # Kiểm tra khi cả hai người chơi đã ra đòn thành công
         if self.choices[self.host.id] and self.choices[self.guest.id]:
-            self.stop() # Khóa view, không nhận thêm lượt bấm nào nữa
+            self.stop() # Khóa view, không cho bấm thêm nữa
             
             c1 = self.choices[self.host.id]
             c2 = self.choices[self.guest.id]
             emoji_map = {"keo": "✌️ Kéo", "bua": "✊ Búa", "bao": "🖐️ Bao"}
             
-            # --- HIỆU ỨNG CHIẾN ĐẤU REAL-TIME (Sửa trực tiếp tin nhắn công khai) ---
+            # --- HIỆU ỨNG CHIẾN ĐẤU REAL-TIME ---
             embed_fight = discord.Embed(title="⚡ TRẬN CHIẾN ĐANG LÊN ĐẾN ĐỈNH ĐIỂM ⚡", color=discord.Color.orange())
             
             fight_frames = [
@@ -1128,7 +1128,7 @@ class OanTuTiView(discord.ui.View):
 
             # --- TÍNH TOÁN KẾT QUẢ VÀ TRAO THƯỞNG ---
             if c1 == c2:
-                # Hòa: Hoàn trả lại tiền cược gốc cho cả 2 bên
+                # Trường hợp Hòa: Hoàn trả lại tiền cược gốc ban đầu cho cả 2 bên
                 update_user(self.host.id, "balance", self.bet, mode="add")
                 update_user(self.guest.id, "balance", self.bet, mode="add")
                 
@@ -1140,14 +1140,14 @@ class OanTuTiView(discord.ui.View):
                 await self.message.edit(embed=embed_res)
                 return
 
-            # Xác định người thắng cuộc
+            # Xác định thắng thua
             host_won = (c1 == "bua" and c2 == "keo") or (c1 == "keo" and c2 == "bao") or (c1 == "bao" and c2 == "bua")
             winner_id = self.host.id if host_won else self.guest.id
             loser_id = self.guest.id if host_won else self.host.id
             winner_name = self.host.name if host_won else self.guest.name
             loser_name = self.guest.name if host_won else self.host.name
             
-            # Người thắng ăn trọn tổng quỹ tiền cược (x2 tiền cược)
+            # Người thắng nhận toàn bộ quỹ tiền cược (x2 tiền cược)
             total_pool = self.bet * 2
             update_user(winner_id, "balance", total_pool, mode="add")
 
@@ -1163,29 +1163,24 @@ class OanTuTiView(discord.ui.View):
             await self.message.edit(embed=embed_res)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Ngăn người ngoài bấm vào nút
         if interaction.user.id not in [self.host.id, self.guest.id]:
             await interaction.response.send_message("❌ Bạn không phải là đấu thủ tham gia trận quyết đấu này!", ephemeral=True)
             return False
         return True
 
-    # SỬA LỖI NÚT BẤM: Tách biệt hoàn toàn phản hồi bấm nút và hàm xử lý kết quả chung
     @discord.ui.button(label="Kéo ✌️", style=discord.ButtonStyle.primary, custom_id="keo")
     async def keo_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
-        
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể đổi chiêu!", ephemeral=True)
         self.choices[interaction.user.id] = "keo"
-        # Phản hồi duy nhất cho interaction này
         await interaction.response.send_message("Bạn đã xuất chiêu: ✌️ Kéo! Vui lòng chờ đối thủ.", ephemeral=True)
-        
-        # Chạy kiểm tra kết quả độc lập, không truyền interaction sang nữa
         await self.check_result()
 
     @discord.ui.button(label="Búa ✊", style=discord.ButtonStyle.success, custom_id="bua")
     async def bua_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
-        
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể đổi chiêu!", ephemeral=True)
         self.choices[interaction.user.id] = "bua"
         await interaction.response.send_message("Bạn đã xuất chiêu: ✊ Búa! Vui lòng chờ đối thủ.", ephemeral=True)
         await self.check_result()
@@ -1193,19 +1188,75 @@ class OanTuTiView(discord.ui.View):
     @discord.ui.button(label="Bao 🖐️", style=discord.ButtonStyle.danger, custom_id="bao")
     async def bao_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
-        
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể đổi chiêu!", ephemeral=True)
         self.choices[interaction.user.id] = "bao"
         await interaction.response.send_message("Bạn đã xuất chiêu: 🖐️ Bao! Vui lòng chờ đối thủ.", ephemeral=True)
         await self.check_result()
 
     async def on_timeout(self):
+        # Trả lại tiền nếu hết giờ phòng chờ (60s)
         for p_id in [self.host.id, self.guest.id]:
             update_user(p_id, "balance", self.bet, mode="add")
         try:
-            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do võ sĩ bỏ dở ván đấu quá lâu! Tiền cược đã được hoàn trả.**", embed=None, view=None)
+            await self.message.edit(content="🛑 **Trận đấu bị hủy do quá thời gian chọn đòn! Tiền đã hoàn lại ví.**", embed=None, view=None)
         except:
             pass
+
+# ==========================================
+# 2. LỆNH KÍCH HOẠT TRÒ CHƠI TRONG KÊNH CHAT
+# ==========================================
+@bot.command(name="ott", aliases=["oantuti"])
+async def oantuti(ctx, member: discord.Member = None, amount: str = None):
+    # Kiểm tra thiếu tham số gõ lệnh
+    if not member or not amount:
+        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk ott @Tên_Bạn_Bè <số_tiền hoặc all>`")
+        
+    # Ngăn tự thách đấu chính mình hoặc chơi với bot
+    if member.id == ctx.author.id: 
+        return await ctx.send("❌ Bạn không thể tự oẳn tù tì với chính mình!")
+    if member.bot: 
+        return await ctx.send("❌ Bot không tham gia trò chơi này!")
+
+    # Lấy thông tin số dư tài khoản người thách đấu (Host)
+    u_host = get_user(ctx.author.id)
+    if not u_host:
+        return await ctx.send("❌ Tài khoản của bạn không tồn tại trên hệ thống!")
+
+    # Xử lý nhập số tiền cược hoặc gõ lệnh cược tất cả "all"
+    if amount.lower() == "all":
+        bet = u_host["balance"]
+    elif amount.isdigit():
+        bet = int(amount)
+    else:
+        bet = 0
+    
+    # Kiểm tra tính hợp lệ của tiền cược
+    if bet <= 0: 
+        return await ctx.send("❌ Số tiền cược không hợp lệ!")
+    if u_host["balance"] < bet: 
+        return await ctx.send(f"❌ Bạn không đủ tiền! Số dư hiện tại: `{u_host['balance']:,}` xu")
+
+    # Kiểm tra ví của người nhận lời thách đấu (Guest)
+    u_guest = get_user(member.id)
+    if not u_guest or u_guest["balance"] < bet: 
+        return await ctx.send(f"❌ Đối thủ không đủ số dư (`{bet:,} xu`) để chấp nhận kèo này!")
+
+    # Trừ tiền tạm thời của cả 2 đấu thủ (để đóng băng số tiền, tránh gian lận chuyển tiền đi chỗ khác)
+    update_user(ctx.author.id, "balance", -bet, mode="add")
+    update_user(member.id, "balance", -bet, mode="add")
+
+    # Giao diện phòng chờ thách đấu công khai ngoài kênh chat
+    embed_lobby = discord.Embed(
+        title="⚔️ ĐÀI ĐẤU OẲN TÙ TÌ SINH TỬ ⚔️",
+        description=f"🔥 **{ctx.author.mention}** đã gửi chiến thư thách đấu đến **{member.mention}**!\n"
+                    f"💰 Mức cược ván đấu: **{bet:,} xu** mỗi người.\n\n"
+                    f"👇 Hai đấu thủ hãy nhấn chọn đòn đánh bí mật ở các nút bên dưới!",
+        color=discord.Color.dark_magenta()
+    )
+    
+    view = OanTuTiView(ctx.author, member, bet)
+    msg = await ctx.send(embed=embed_lobby, view=view)
+    view.message = msg
 #---KHOBAU---
 class SuperTreasureView(discord.ui.View):
     def __init__(self, author, bet_amount):
