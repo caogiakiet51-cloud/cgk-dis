@@ -151,21 +151,23 @@ async def on_ready():
 # --- [1] LỆNH ADMIN ĐỘC QUYỀN: BƠM TIỀN ---
 
 @bot.command(name="add")
-@commands.has_permissions(administrator=True) # Chỉ Admin mới được dùng
-async def add_money_multi(ctx, amount: str = None, *args):
-    # 1. Kiểm tra cú pháp cơ bản
-    if not amount or not args:
-        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk add <số_tiền> @Người_1 @Người_2 @Người_3...`")
+@commands.has_permissions(administrator=True)
+async def add_money_multi(ctx, *args):
+    # args sẽ gom toàn bộ các từ bạn gõ sau lệnh 'cgk add'
+    if not args:
+        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk add <số_tiền> @Người_1 @Người_2...` hoặc `cgk add @Người_1 @Người_2... <số_tiền>`")
 
-    # 2. Kiểm tra số tiền hợp lệ
-    if not amount.isdigit():
-        return await ctx.send("❌ Số tiền thêm vào phải là một số nguyên dương hợp lệ!")
-    
-    money_to_add = int(amount)
-    if money_to_add <= 0:
-        return await ctx.send("❌ Số tiền thêm vào phải lớn hơn 0!")
+    # Tự động lọc tìm xem trong các từ bạn gõ, từ nào là số nguyên dương
+    money_to_add = None
+    for arg in args:
+        if arg.isdigit():
+            money_to_add = int(arg)
+            break # Tìm thấy số tiền thì dừng vòng lặp
 
-    # 3. Lọc danh sách người dùng được tag từ nội dung tin nhắn (ctx.message.mentions)
+    if money_to_add is None or money_to_add <= 0:
+        return await ctx.send("❌ Vui lòng nhập số tiền cần thêm vào ván đấu (phải là số nguyên dương hợp lệ)!")
+
+    # Lấy danh sách những người được tag trong tin nhắn
     targets = ctx.message.mentions
     
     if not targets:
@@ -174,42 +176,24 @@ async def add_money_multi(ctx, amount: str = None, *args):
     success_list = []
     fail_list = []
 
-    # 4. Vòng lặp cập nhật database cho từng người một
     for member in targets:
         if member.bot:
-            fail_list.append(f"🤖 {member.name} (Bot)")
+            fail_list.append(f"🤖 {member.name}")
             continue
-            
         try:
-            # Gọi hàm database của bạn để cộng tiền
             update_user(member.id, "balance", money_to_add, mode="add")
             success_list.append(member.mention)
-        except Exception as e:
-            fail_list.append(f"❌ {member.name} (Lỗi hệ thống)")
+        except:
+            fail_list.append(f"❌ {member.name}")
 
-    # 5. Thiết kế Embed báo cáo kết quả tổng quan
-    embed_res = discord.Embed(
-        title="👑 NHÀ CÁI TỐI CAO 👑",
-        color=discord.Color.green(),
-        description=f"⚡ **Quản trị viên:** {ctx.author.mention} vừa thực hiện lệnh bơm tiền.\n"
-                    f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
-    )
-
-    if success_list:
-        embed_res.add_field(
-            name=f"✅ Đã cộng tiền thành công ({len(success_list)} người)", 
-            value=", ".join(success_list), 
-            inline=False
-        )
+    embed_res = discord.Embed(title="💰 BIÊN LAI CỘNG TIỀN HÀNG LOẠT 💰", color=discord.Color.green())
+    embed_res.description = f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
+    
+    if success_list: 
+        embed_res.add_field(name=f"✅ Thành công ({len(success_list)} người)", value=", ".join(success_list), inline=False)
+    if fail_list: 
+        embed_res.add_field(name=f"⚠️ Thất bại", value=", ".join(fail_list), inline=False)
         
-    if fail_list:
-        embed_res.add_field(
-            name=f"⚠️ Thất bại ({len(fail_list)} tài khoản)", 
-            value=", ".join(fail_list), 
-            inline=False
-        )
-
-    embed_res.set_footer(text=f"Thao tác bởi: {ctx.author.name}")
     await ctx.send(embed=embed_res)
 
 # Xử lý lỗi nếu người dùng không phải Admin cố tình gõ lệnh
