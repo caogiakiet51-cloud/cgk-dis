@@ -1052,38 +1052,151 @@ async def duangua(ctx, amount: str = None, horse_num: int = None):
             await ctx.send(f"✅ **{ctx.author.name}** đã tham gia phòng! Đặt **{bet:,} xu** vào Ngựa {horse_num}.")
     
 #---OTT---
-async def on_timeout(self):
+class OanTuTiView(discord.ui.View):
+    def __init__(self, host, guest, bet_amount):
+        super().__init__(timeout=60.0)
+        self.host = host
+        self.guest = guest
+        self.bet = bet_amount
+        self.choices = {host.id: None, guest.id: None}
+        self.message = None
+
+    async def check_result(self, interaction: discord.Interaction):
+        # Kiểm tra nếu cả hai người chơi đều đã đưa ra lựa chọn
+        if self.choices[self.host.id] and self.choices[self.guest.id]:
+            self.stop() # Dừng nhận tương tác từ view
+            
+            c1 = self.choices[self.host.id]
+            c2 = self.choices[self.guest.id]
+            emoji_map = {"keo": "✌️ Kéo", "bua": "✊ Búa", "bao": "🖐️ Bao"}
+            
+            # Giải phóng interaction ẩn danh lập tức để tránh lỗi giao diện của Discord
+            await interaction.response.send_message("⚡ Hai đấu thủ đã chọn xong! Trận đấu bắt đầu...", ephemeral=True)
+            
+            # --- HIỆU ỨNG CHIẾN ĐẤU REAL-TIME ---
+            embed_fight = discord.Embed(title="⚡ TRẬN CHIẾN ĐANG LÊN ĐẾN ĐỈNH ĐIỂM ⚡", color=discord.Color.orange())
+            
+            fight_frames = [
+                f"⚔️ **{self.host.name}** gồng nội công...\n⚔️ **{self.guest.name}** thủ thế...",
+                f"⚡ **{self.host.name}** xuất chiêu bí mật!\n⚡ **{self.guest.name}** bung vạn kiếm quy tông!",
+                "🔥 **💥 BÙM... HAI LUỒNG NĂNG LƯỢNG VA CHẠM NHAU!!! 💥**\n*Khói bụi mù mịt, ai sẽ là người sống sót?*"
+            ]
+            
+            for frame in fight_frames:
+                embed_fight.description = frame
+                await self.message.edit(embed=embed_fight, view=None)
+                await asyncio.sleep(1.2)
+
+            # --- TÍNH TOÁN KẾT QUẢ VÀ HOÀN TRẢ/TRAO THƯỞNG ---
+            if c1 == c2:
+                # Trường hợp Hoà: Trả lại số tiền cược gốc ban đầu cho cả 2 bên
+                update_user(self.host.id, "balance", self.bet, mode="add")
+                update_user(self.guest.id, "balance", self.bet, mode="add")
+                
+                embed_res = discord.Embed(
+                    title="🤝 KẾT QUẢ: BẤT PHÂN THẮNG BẠI!",
+                    description=f"• **{self.host.name}** tung: {emoji_map[c1]}\n• **{self.guest.name}** tung: {emoji_map[c2]}\n\n⚖️ Hai mãnh tướng võ công ngang ngửa! Tiền cược **{self.bet:,} xu** đã được hoàn trả về ví an toàn.",
+                    color=discord.Color.light_grey()
+                )
+                await self.message.edit(embed=embed_res)
+                return
+
+            # Xác định điều kiện người thách đấu (host) thắng
+            host_won = (c1 == "bua" and c2 == "keo") or (c1 == "keo" and c2 == "bao") or (c1 == "bao" and c2 == "bua")
+            winner_id = self.host.id if host_won else self.guest.id
+            loser_id = self.guest.id if host_won else self.host.id
+            winner_name = self.host.name if host_won else self.guest.name
+            loser_name = self.guest.name if host_won else self.host.name
+            
+            # Người thắng ăn trọn tổng tiền cược của cả 2 bên (x2 tiền cược)
+            total_pool = self.bet * 2
+            update_user(winner_id, "balance", total_pool, mode="add")
+
+            embed_res = discord.Embed(
+                title=f"🏆 CHIẾN THẦN BẤT BẠI XUẤT HIỆN 🏆",
+                description=f"👑 Nhà vô địch ván đấu: **{winner_name}**\n\n"
+                            f"• **{self.host.name}** sử dụng: {emoji_map[c1]}\n"
+                            f"• **{self.guest.name}** sử dụng: {emoji_map[c2]}\n\n"
+                            f"💰 **{winner_name}** khắc chế hoàn toàn đối thủ, ẵm trọn: **+{total_pool:,} xu**\n"
+                            f"💸 **{loser_name}** kiệt sức ngã gục, tổn thất: `-{self.bet:,}` xu",
+                color=discord.Color.gold()
+            )
+            await self.message.edit(embed=embed_res)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Chỉ cho phép 2 người trong cuộc bấm nút
+        if interaction.user.id not in [self.host.id, self.guest.id]:
+            await interaction.response.send_message("❌ Bạn không phải là đấu thủ tham gia trận quyết đấu này!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Kéo ✌️", style=discord.ButtonStyle.primary, custom_id="keo")
+    async def keo_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.choices[interaction.user.id] is not None:
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        self.choices[interaction.user.id] = "keo"
+        await interaction.response.send_message("Bạn đã xuất chiêu: ✌️ Kéo! Vui lòng chờ đối thủ.", ephemeral=True)
+        await self.check_result(interaction)
+
+    @discord.ui.button(label="Búa ✊", style=discord.ButtonStyle.success, custom_id="bua")
+    async def bua_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.choices[interaction.user.id] is not None:
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        self.choices[interaction.user.id] = "bua"
+        await interaction.response.send_message("Bạn đã xuất chiêu: ✊ Búa! Vui lòng chờ đối thủ.", ephemeral=True)
+        await self.check_result(interaction)
+
+    @discord.ui.button(label="Bao 🖐️", style=discord.ButtonStyle.danger, custom_id="bao")
+    async def bao_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.choices[interaction.user.id] is not None:
+            return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        self.choices[interaction.user.id] = "bao"
+        await interaction.response.send_message("Bạn đã xuất chiêu: 🖐️ Bao! Vui lòng chờ đối thủ.", ephemeral=True)
+        await self.check_result(interaction)
+
+    async def on_timeout(self):
+        # Trả lại tiền cược gốc cho cả 2 người chơi nếu ván đấu bị treo quá hạn
         for p_id in [self.host.id, self.guest.id]:
             update_user(p_id, "balance", self.bet, mode="add")
         try:
-            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do quá thời gian chọn đòn! Tiền đã hoàn lại ví.**", embed=None, view=None)
+            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do võ sĩ bỏ dở trận đấu quá lâu! Tiền cược đã hoàn trả.**", embed=None, view=None)
         except:
             pass
 
 @bot.command(name="oantuti", aliases=["ott", "pqp"])
 async def oantuti(ctx, member: discord.Member = None, amount: str = None):
     if not member or not amount:
-        return await ctx.send("❌ **Cú pháp:** `cgk oantuti @Tên_Bạn_Bè <số_tiền/all>`")
+        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk oantuti @Tên_Bạn_Bè <số_tiền/all>`")
         
-    if member.id == ctx.author.id: return await ctx.send("❌ Bạn không thể tự oẳn tù tì với chính mình!")
-    if member.bot: return await ctx.send("❌ Bot không tham gia trò chơi này!")
+    if member.id == ctx.author.id: 
+        return await ctx.send("❌ Bạn không thể tự oẳn tù tì với chính mình!")
+    if member.bot: 
+        return await ctx.send("❌ Đối thủ phải là người chơi thực tế, không thể thách đấu Bot!")
 
+    # Lấy thông tin tài chính người thách đấu
     u_host = get_user(ctx.author.id)
+    if not u_host:
+        return await ctx.send("❌ Dữ liệu tài khoản của bạn chưa được thiết lập!")
+        
     bet = u_host["balance"] if amount.lower() == "all" else int(amount) if amount.isdigit() else 0
     
-    if bet <= 0 or bet > u_host["balance"]: return await ctx.send("❌ Tiền cược không hợp lệ hoặc ví của bạn rỗng!")
+    if bet <= 0 or bet > u_host["balance"]: 
+        return await ctx.send("❌ Số tiền cược không hợp lệ hoặc ví của bạn không đủ số dư!")
+        
+    # Lấy thông tin tài chính đối thủ
     u_guest = get_user(member.id)
-    if u_guest["balance"] < bet: return await ctx.send(f"❌ Đối thủ (**{member.name}**) không đủ tiền theo kèo!")
+    if not u_guest or u_guest["balance"] < bet: 
+        return await ctx.send(f"❌ Đối thủ (**{member.name}**) không đủ số dư để theo mức cược này!")
 
-    # Tạm trừ tiền cược của cả 2 trước trận đấu
+    # Đóng băng tiền cược của cả hai đấu thủ trước khi vào trận
     update_user(ctx.author.id, "balance", -bet, mode="add")
     update_user(member.id, "balance", -bet, mode="add")
 
     embed_lobby = discord.Embed(
         title="⚔️ ĐÀI ĐẤU OẲN TÙ TÌ SINH TỬ ⚔️",
         description=f"🔥 **{ctx.author.mention}** đã dựng võ đài thách đấu **{member.mention}**!\n"
-                    f"💰 Mức cược đặt ra: **{bet:,} xu** mỗi người.\n\n"
-                    f"👇 Hãy nhấn chọn đòn đánh ẩn danh của bạn dưới đây. Trận đấu bắt đầu khi cả 2 đã chọn xong!",
+                    f"💰 Mức cược ván đấu: **{bet:,} xu** mỗi người.\n\n"
+                    f"👇 *Hãy nhấn chọn đòn đánh kín của bạn dưới đây. Kết quả sẽ được lật mở khi cả hai bên đã chọn xong!*",
         color=discord.Color.dark_magenta()
     )
     
