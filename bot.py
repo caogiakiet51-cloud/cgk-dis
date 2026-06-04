@@ -1503,35 +1503,61 @@ async def top(ctx):
     await ctx.send(msg)
     
 # ---CHO TIỀN---
-@bot.command(name="give")
-async def give(ctx, member: discord.Member, amount: int):
-    # 1. Kiểm tra số tiền hợp lệ
-    if amount <= 0:
-        return await ctx.send("❌ Số tiền tặng phải lớn hơn 0!")
+@bot.command(name="give", aliases=["pay", "chuyentien"])
+async def give(ctx, members: commands.Greedy[discord.Member], amount: int):
+    # 1. Kiểm tra đầu vào
+    if not members:
+        return await ctx.send("❌ Bạn cần tag ít nhất một người để tặng tiền! (VD: `cgk give @A @B 1000`)")
     
-    if member.id == ctx.author.id:
+    if amount <= 0:
+        return await ctx.send("❌ Số tiền tặng cho mỗi người phải lớn hơn 0!")
+
+    # Lọc danh sách: Loại bỏ bản thân và loại bỏ các tag trùng lặp
+    valid_members = [m for m in members if m.id != ctx.author.id]
+    valid_members = list(set(valid_members))
+
+    if not valid_members:
         return await ctx.send("❌ Bạn không thể tự tặng tiền cho chính mình!")
+
+    # Tính tổng số tiền sẽ bị trừ (Tiền x Số người nhận)
+    total_amount = amount * len(valid_members)
 
     # 2. Đọc dữ liệu
     db = load_db()
     sender_id = str(ctx.author.id)
-    receiver_id = str(member.id)
     
     # Đảm bảo sender có tài khoản
-    if sender_id not in db: db[sender_id] = {"balance": 0}
-    # Đảm bảo receiver có tài khoản
-    if receiver_id not in db: db[receiver_id] = {"balance": 0}
+    if sender_id not in db: 
+        db[sender_id] = {"balance": 0}
 
     # 3. Kiểm tra số dư người gửi
-    if db[sender_id]["balance"] < amount:
-        return await ctx.send(f"❌ Bạn không đủ tiền! Bạn chỉ có **{db[sender_id]['balance']:,} xu**.")
+    if db[sender_id]["balance"] < total_amount:
+        return await ctx.send(
+            f"❌ Bạn không đủ tiền! Bạn cần **{total_amount:,} xu** để tặng cho {len(valid_members)} người, "
+            f"nhưng bạn chỉ có **{db[sender_id]['balance']:,} xu**."
+        )
 
-    # 4. Thực hiện giao dịch (Trừ người gửi - Cộng người nhận)
-    db[sender_id]["balance"] -= amount
-    db[receiver_id]["balance"] += amount
+    # 4. Thực hiện giao dịch (Trừ tổng tiền người gửi)
+    db[sender_id]["balance"] -= total_amount
+    
+    success_mentions = []
+    # (Cộng tiền cho từng người nhận)
+    for member in valid_members:
+        receiver_id = str(member.id)
+        if receiver_id not in db: 
+            db[receiver_id] = {"balance": 0}
+            
+        db[receiver_id]["balance"] += amount
+        success_mentions.append(member.mention)
+
     save_db(db)
 
-    await ctx.send(f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho {member.mention}!")
+    # 5. Gửi thông báo thành công
+    mentions_str = ", ".join(success_mentions)
+    await ctx.send(
+        f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho mỗi người: {mentions_str}\n"
+        f"💸 (Tổng số tiền đã trừ: **{total_amount:,} xu**)"
+    )
  
 #--- DSGAME ---
 # Thêm dòng này ở bất kỳ đâu phía trên (ngay sau dòng khai báo bot = commands.Bot) 
