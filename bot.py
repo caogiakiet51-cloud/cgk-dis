@@ -70,24 +70,29 @@ def get_user(user_id):
     return db[uid]
 
 def update_user(user_id, key, value, mode="set"):
-    # 1. KHỞI TẠO BIẾN NGAY TỪ ĐẦU
+    # Đảm bảo luôn trả về ít nhất 2 giá trị
     is_up = False 
+    lvl = 1
     
-    get_user(user_id)
+    # Đọc dữ liệu
     db = load_db()
     uid = str(user_id)
     
+    # Đảm bảo user tồn tại
+    if uid not in db:
+        get_user(user_id) # Gọi hàm tạo user nếu chưa có
+        db = load_db()
+        
     if mode == "add":
-        db[uid][key] += value
+        db[uid][key] = db[uid].get(key, 0) + value
     else:
         db[uid][key] = value
         
     save_db(db)
     
-    # Lấy level hiện tại
-    lvl = db[uid].get("level", 1) 
+    # Lấy level mới nhất (nếu có)
+    lvl = db[uid].get("level", 1)
     
-    # 2. TRẢ VỀ BIẾN ĐÃ ĐƯỢC KHỞI TẠO
     return is_up, lvl
 
 
@@ -916,24 +921,31 @@ async def duangua(ctx, amount: str = None, horse_num: int = None):
         # -----------------------------------------------------------------
         # XỬ LÝ KẾT QUẢ VÀ TRẢ THƯỞNG 100% (Giữ nguyên logic sạch của bạn)
         # -----------------------------------------------------------------
+# ... (đoạn vòng lặp while kết thúc)
         winning_horse = max(positions, key=positions.get)
         result_embed = discord.Embed(title=f"🏆 NGỰA SỐ {winning_horse} CÁN ĐÍCH ĐẦU TIÊN! 🏆", color=discord.Color.gold())
         summary = []
         
         for p_id, b_info in race_data["bets"].items():
-            update_user(p_id, "games_played", 1, mode="add")
+            # Thay vì gọi trực tiếp, dùng _ để bỏ qua giá trị trả về nếu không dùng
+            _, _ = update_user(p_id, "games_played", 1, mode="add")
             
             if b_info["horse"] == winning_horse:
                 win_money = int(b_info["bet"] * 3.5) 
                 update_user(p_id, "balance", win_money, mode="add")
                 update_user(p_id, "total_win_money", win_money - b_info["bet"], mode="add")
-                summary.append(f"🎉 **{b_info['name']}** đoán đỉnh trúng ngay Ngựa {winning_horse}: +{win_money:,} xu")
+                summary.append(f"🎉 **{b_info['name']}**: +{win_money:,} xu")
             else:
                 update_user(p_id, "total_lose_money", b_info["bet"], mode="add")
-                summary.append(f"💸 **{b_info['name']}** ra đê vì tin Ngựa {b_info['horse']}: -{b_info['bet']:,} xu")
+                summary.append(f"💸 **{b_info['name']}**: -{b_info['bet']:,} xu")
 
         result_embed.description = "\n".join(summary)
-        await ctx.send(embed=result_embed)
+        
+        # Đảm bảo gửi kết quả bất chấp lỗi ở trên
+        try:
+            await ctx.send(embed=result_embed)
+        except Exception as e:
+            print(f"Lỗi gửi tin nhắn kết quả: {e}")
         
         del bot.active_races[guild_id]
         return
