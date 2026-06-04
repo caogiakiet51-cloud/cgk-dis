@@ -30,9 +30,28 @@ def load_db():
     except:
         return {}
 
+pushing = False
+
 def save_db(data):
+    global pushing
+    # 1. Lưu file json
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
+    
+    # 2. Chỉ push nếu chưa có tiến trình nào đang chạy
+    if not pushing:
+        def git_push():
+            global pushing
+            pushing = True
+            try:
+                os.system("git add database.json")
+                os.system('git commit -m "Auto-save database"')
+                os.system("git push origin main")
+            except:
+                pass
+            pushing = False
+        
+        threading.Thread(target=git_push).start()
 
 def get_user(user_id):
     db = load_db()
