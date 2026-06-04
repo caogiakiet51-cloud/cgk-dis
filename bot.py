@@ -1086,33 +1086,23 @@ async def pet_battle(ctx):
 @bot.command(name="xoatien")
 @commands.has_permissions(administrator=True)
 async def xoatien(ctx, member: discord.Member):
-    file_path = 'bank.json'
+    # Sửa đường dẫn trỏ đúng vào database.json
+    file_path = 'database.json'
     
-    # Đọc dữ liệu
-    with open(file_path, 'r') as f:
-        data = json.load(f)
-    
+    # Đọc dữ liệu từ database.json
+    db = load_db() 
     user_id = str(member.id)
     
-    if user_id in data:
-        # Cách sửa: Chỉ gán balance về 0, không gán cả user_id = 0
-        if isinstance(data[user_id], dict):
-            data[user_id]['balance'] = 0
-        else:
-            # Trường hợp dữ liệu cũ của bạn chỉ là số đơn thuần
-            data[user_id] = {"balance": 0, "level": 1, "xp": 0}
-            
-        # Lưu lại file
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=4)
-            
+    if user_id in db:
+        # Reset số dư về 0
+        db[user_id]['balance'] = 0
+        
+        # Lưu lại vào database.json
+        save_db(db)
+        
         await ctx.send(f"✅ Đã xóa sạch số dư của {member.mention} về 0.")
     else:
         await ctx.send("❌ Người dùng này chưa có tài khoản trong hệ thống.")
-
-    # Lưu lại file
-    with open(file_path, 'w') as f:
-        json.dump(data, f)
 
 # 3. LỆNH TỰ XÓA TIỀN CỦA CHÍNH MÌNH
 @bot.command(name="resetme")
