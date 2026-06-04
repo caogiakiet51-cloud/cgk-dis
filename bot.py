@@ -19,6 +19,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="cgk ", intents=intents, help_command=None)
 
+
 # --- KHỞI TẠO VÀ QUẢN LÝ DATABASE TOÀN DIỆN ---
 def load_db():
     if not os.path.exists(DB_FILE):
@@ -88,6 +89,7 @@ def update_user(user_id, key, value, mode="set"):
     
     # 2. TRẢ VỀ BIẾN ĐÃ ĐƯỢC KHỞI TẠO
     return is_up, lvl
+
 
 # --- SỰ KIỆN TỰ ĐỘNG CÀY XP & CỘNG TIỀN KHI LÊN CẤP ---
 @bot.event
@@ -820,6 +822,202 @@ async def bcr(ctx, *args):
         
     await msg.edit(embed=embed)
     
+#---ĐUA NGỰA---
+if not hasattr(bot, "active_races"):
+    bot.active_races = {}
+
+@bot.command(name="duangua", aliases=["dn", "race"])
+async def duangua(ctx, amount: str = None, horse_num: int = None):
+    guild_id = ctx.guild.id
+    
+    # -----------------------------------------------------------------
+    # TRƯỜNG HỢP 1: XUẤT PHÁT TRẬN ĐUA (Chuyển động nâng cấp)
+    # -----------------------------------------------------------------
+    if amount and amount.lower() == "start":
+        if guild_id not in bot.active_races:
+            return await ctx.send("❌ Hiện tại không có phòng đua nào đang mở ở server này!")
+        
+        race_data = bot.active_races[guild_id]
+        if race_data["status"] == "running":
+            return await ctx.send("❌ Cuộc đua đang diễn ra rồi!")
+            
+        if ctx.author.id != race_data["host_id"]:
+            return await ctx.send(f"❌ Chỉ có chủ phòng (**{race_data['host_name']}**) mới có quyền cho đua!")
+            
+        if len(race_data["bets"]) < 1:
+            return await ctx.send("❌ Phòng đua phải có ít nhất 1 người tham gia!")
+            
+        race_data["status"] = "running"
+        
+        # Hiệu ứng đếm ngược xuất phát sinh động
+        countdown_msg = await ctx.send("🚨 **Trường đua đang chuẩn bị...**")
+        for count in ["🔴 ĐỎ... (3)", "🟡 VÀNG... (2)", "🟢 XANH... (1)", "🔥 XUẤT PHÁT !!! 🔥"]:
+            await asyncio.sleep(1)
+            await countdown_msg.edit(content=f"**{count}**")
+        await asyncio.sleep(0.5)
+        await countdown_msg.delete()
+
+        # Khởi tạo thông số đường đua lung linh
+        positions = {1: 0, 2: 0, 3: 0, 4: 0}
+        track_length = 10  # Số ô đường đua
+        finish = False
+        
+        embed_race = discord.Embed(title="🏇 GIẢI ĐUA NGỰA CÚP ĐẠI GIA 🏇", color=discord.Color.green())
+        race_msg = await ctx.send(embed=embed_race)
+
+        # Danh sách câu bình luận ngẫu nhiên để bot tự gáy
+        commentaries = [
+            "Ngựa số {leading} đang bứt tốc kinh hoàng như gắn tên lửa!",
+            "Cạnh tranh gay gắt! Các nài ngựa đang bám sát nút nhau!",
+            "Bất ngờ chưa! Ngựa số {leading} lật kèo vươn lên dẫn đầu!",
+            "Ngựa số {trailing} đang vấp cỏ hụt hơi phía sau kìa anh em ơi!",
+            "Khán giả đang gào thét tên chú ngựa số {leading}!!"
+        ]
+
+        # VÒNG LẶP CHUYỂN ĐỘNG REAL-TIME
+        while not finish:
+            # Ngẫu nhiên bước tiến từ 1 đến 2 ô để đường đua mượt, không bị quá nhanh
+            for h in range(1, 5):
+                positions[h] += random.randint(1, 2)
+                if positions[h] >= track_length: 
+                    finish = True
+
+            # Lấy con dẫn đầu và con đi cuối hiện tại để làm bình luận
+            leading_horse = max(positions, key=positions.get)
+            trailing_horse = min(positions, key=positions.get)
+
+            # Vẽ đồ họa đường đua mới
+            lines = []
+            for h in range(1, 5):
+                pos = min(positions[h], track_length)
+                
+                # Tạo vệt bụi phía sau ngựa, ô trống phía trước
+                trail = "▪️" * pos
+                dust = "💨" if pos > 0 and pos < track_length else ""
+                ahead = "▫️" * (track_length - pos)
+                
+                # Thay đổi emoji ngựa theo trạng thái về đích
+                horse_emoji = "🥇" if pos >= track_length else f"🐎{h}"
+                gate = "🚩" if pos >= track_length else "🏁"
+                
+                track_line = f"**[{h}]** {trail}{dust}{horse_emoji}{ahead} {gate}"
+                lines.append(track_line)
+                
+            embed_race.description = "\n\n".join(lines)
+            
+            # Chọn ngẫu nhiên một câu bình luận thời gian thực cho sinh động
+            cmt = random.choice(commentaries).format(leading=leading_horse, trailing=trailing_horse)
+            embed_race.set_field_at(0, name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False) if embed_race.fields else embed_race.add_field(name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False)
+            
+            await race_msg.edit(embed=embed_race)
+            await asyncio.sleep(1.2) # Khoảng thời gian lý tưởng để không bị Discord rate limit (giật lag)
+
+        # -----------------------------------------------------------------
+        # XỬ LÝ KẾT QUẢ VÀ TRẢ THƯỞNG 100% (Giữ nguyên logic sạch của bạn)
+        # -----------------------------------------------------------------
+        winning_horse = max(positions, key=positions.get)
+        result_embed = discord.Embed(title=f"🏆 NGỰA SỐ {winning_horse} CÁN ĐÍCH ĐẦU TIÊN! 🏆", color=discord.Color.gold())
+        summary = []
+        
+        for p_id, b_info in race_data["bets"].items():
+            update_user(p_id, "games_played", 1, mode="add")
+            
+            if b_info["horse"] == winning_horse:
+                win_money = int(b_info["bet"] * 3.5) 
+                update_user(p_id, "balance", win_money, mode="add")
+                update_user(p_id, "total_win_money", win_money - b_info["bet"], mode="add")
+                summary.append(f"🎉 **{b_info['name']}** đoán đỉnh trúng ngay Ngựa {winning_horse}: +{win_money:,} xu")
+            else:
+                update_user(p_id, "total_lose_money", b_info["bet"], mode="add")
+                summary.append(f"💸 **{b_info['name']}** ra đê vì tin Ngựa {b_info['horse']}: -{b_info['bet']:,} xu")
+
+        result_embed.description = "\n".join(summary)
+        await ctx.send(embed=result_embed)
+        
+        del bot.active_races[guild_id]
+        return
+
+    # -----------------------------------------------------------------
+    # TRƯỜNG HỢP 2: HỦY PHÒNG ĐUA
+    # -----------------------------------------------------------------
+    if amount and amount.lower() == "cancel":
+        if guild_id not in bot.active_races:
+            return await ctx.send("❌ Hiện tại không có phòng đua nào đang mở!")
+        race_data = bot.active_races[guild_id]
+        if ctx.author.id != race_data["host_id"]:
+            return await ctx.send("❌ Chỉ có chủ phòng mới có quyền hủy phòng!")
+        
+        for p_id, b_info in race_data["bets"].items():
+            update_user(p_id, "balance", b_info["bet"], mode="add")
+        
+        del bot.active_races[guild_id]
+        return await ctx.send("🛑 **Phòng đua ngựa đã bị chủ phòng hủy bỏ! Toàn bộ tiền cược đã được hoàn lại ví.**")
+
+    # -----------------------------------------------------------------
+    # TRƯỜNG HỢP 3: TẠO PHÒNG HOẶC ĐẶT CƯỢC KÉ
+    # -----------------------------------------------------------------
+    if not amount or not horse_num or horse_num < 1 or horse_num > 4:
+        return await ctx.send(
+            "❌ **Cú pháp cược đua ngựa:**\n"
+            "👉 `cgk duangua <số_tiền/all> <số_ngựa_từ_1_đến_4>`\n"
+            "👉 `cgk duangua start` - Chủ phòng gõ để bắt đầu đua.\n"
+            "👉 `cgk duangua cancel` - Chủ phòng gõ để hủy phòng."
+        )
+
+    u = get_user(ctx.author.id)
+    bet = u["balance"] if amount.lower() == "all" else int(amount) if amount.isdigit() else 0
+    
+    if bet <= 0 or bet > u["balance"]:
+        return await ctx.send("❌ Số tiền cược không hợp lệ hoặc bạn không đủ số dư trong ví!")
+
+    if guild_id not in bot.active_races:
+        bot.active_races[guild_id] = {
+            "host_id": ctx.author.id,
+            "host_name": ctx.author.name,
+            "status": "lobby",
+            "bets": {ctx.author.id: {"bet": bet, "horse": horse_num, "name": ctx.author.name}},
+            "msg_id": None
+        }
+        update_user(ctx.author.id, "balance", -bet, mode="add")
+        
+        embed = discord.Embed(title="🏇 TRƯỜNG ĐUA NGỰA MULTIPLAYER ĐANG MỞ 🏇", color=discord.Color.blue())
+        embed.description = (
+            f"👑 Chủ phòng: **{ctx.author.name}**\n\n"
+            f"**Danh sách đặt cược hiện tại:**\n"
+            f"• **{ctx.author.name}**: Đặt {bet:,} xu vào Ngựa {horse_num}\n\n"
+            f"👉 Bạn bè hãy gõ `cgk duangua <tiền> <số_ngựa>` để cùng tham gia!\n"
+            f"🔥 Khi nào đông đủ, Chủ phòng hãy gõ `cgk duangua start` để xuất phát!"
+        )
+        lobby_msg = await ctx.send(embed=embed)
+        bot.active_races[guild_id]["msg_id"] = lobby_msg.id
+        
+    else:
+        race_data = bot.active_races[guild_id]
+        if race_data["status"] == "running":
+            return await ctx.send("❌ Cuộc đua đã bắt đầu di chuyển, bạn không thể cược thêm!")
+        if ctx.author.id in race_data["bets"]:
+            return await ctx.send("❌ Bạn đã đặt cược trong phòng này rồi!")
+        
+        update_user(ctx.author.id, "balance", -bet, mode="add")
+        race_data["bets"][ctx.author.id] = {"bet": bet, "horse": horse_num, "name": ctx.author.name}
+        
+        players_str = "\n".join([f"• **{b['name']}**: Đặt {b['bet']:,} xu vào Ngựa {b['horse']}" for b in race_data["bets"].values()])
+        
+        embed = discord.Embed(title="🏇 TRƯỜNG ĐUA NGỰA MULTIPLAYER ĐANG MỞ 🏇", color=discord.Color.blue())
+        embed.description = (
+            f"👑 Chủ phòng: **{race_data['host_name']}**\n\n"
+            f"**Danh sách đặt cược hiện tại:**\n{players_str}\n\n"
+            f"👉 Bạn bè tiếp tục gõ `cgk duangua <tiền> <số_ngựa>` để vào đặt cược chung!\n"
+            f"🔥 Chủ phòng hãy gõ `cgk duangua start` để xuất phát trận đua!"
+        )
+        
+        try:
+            msg_to_edit = await ctx.channel.fetch_message(race_data["msg_id"])
+            await msg_to_edit.edit(embed=embed)
+            await ctx.message.delete()
+        except:
+            await ctx.send(f"✅ **{ctx.author.name}** đã tham gia phòng! Đặt **{bet:,} xu** vào Ngựa {horse_num}.")
+    
 # --- [10] HỆ THỐNG MỞ HÒM THÚ CƯNG (LOOTBOX) ---
 @bot.command(name="lootbox")
 async def open_lootbox(ctx):
@@ -977,13 +1175,17 @@ async def dsgame(ctx):
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
 
-    # 1. KHU VỰC TÀI CHÍNH & CÁ NHÂN
+    # 1. KHU VỰC TÀI CHÍNH & CÁ NHÂN (Đã cập nhật lệnh stats chi tiết)
     economy_cmd = (
         "💳 `cgk cash` - Xem số dư tài khoản, Level và XP hiện tại.\n"
         "🎁 `cgk daily` - Điểm danh nhận xu và phần thưởng mỗi ngày.\n"
-        "💸 `cgk give @người_chơi <số_tiền>` - Chuyển tiền cho người khác."
+        "💸 `cgk give @người_chơi <số_tiền>` - Chuyển tiền cho người khác.\n\n"
+        "**📊 THỐNG KÊ CÁ NHÂN (LỆNH: `cgk stats` hoặc `cgk profile`)**\n"
+        "Xem hồ sơ đỏ đen, tỷ lệ thắng/thua % và tổng số tiền lời/lỗ tích lũy.\n"
+        "👉 *Xem bản thân:* `cgk me`\n"
+        "👉 *Soi hồ sơ bạn bè:* `cgk stats @tên_người_chơi`"
     )
-    embed.add_field(name="🏦 HỆ THỐNG TÀI CHÍNH", value=economy_cmd, inline=False)
+    embed.add_field(name="🏦 HỆ THỐNG TÀI CHÍNH & HỒ SƠ", value=economy_cmd, inline=False)
 
     # 2. KHU VỰC MINI-GAMES (CÁ CƯỢC NHANH)
     minigame_cmd = (
@@ -995,28 +1197,33 @@ async def dsgame(ctx):
     )
     embed.add_field(name="🎲 MINI GAMES GIẢI TRÍ", value=minigame_cmd, inline=False)
 
-    # 3. KHU VỰC GAME BÀI (CARD GAMES) & BACCARAT CHI TIẾT
+    # 3. KHU VỰC GAME BÀI (CARD GAMES)
     card_cmd = (
         "🃏 `cgk bj <tiền>` - Chơi Xì Dách (Blackjack) đọ trí với nhà cái.\n"
         "🎴 `cgk cao <tiền>` - Chơi Bài Cào 3 lá.\n\n"
         "**👑 BACCARAT (LỆNH: `cgk bcr`)**\n"
         "Các cửa: `con` (x2), `cai` (x1.95), `hoa` (x9), `condoi` (x12), `caidoi` (x12).\n"
-        "👉 **Cách 1 (Cược Đơn):** `cgk bcr <tiền> <cửa>`\n"
-        "*(VD: `cgk bcr 5000 con` - Đặt 5K vào cửa Player)*\n"
-        "👉 **Cách 2 (Cược Kép):** `cgk bcr <tiền_1> <cửa_1> <tiền_2> <cửa_2>`\n"
-        "*(VD: `cgk bcr 5000 con 1000 condoi` - Đặt 5K cửa Player & 1K cửa Đôi Con)*"
+        "👉 *Cách cược:* `cgk bcr 5000 con` hoặc `cgk bcr 5000 con 1000 condoi`"
     )
     embed.add_field(name="♠️ CASINO GAME BÀI", value=card_cmd, inline=False)
 
-    # 4. KHU VỰC VẬT PHẨM & TƯƠNG TÁC NGƯỜI CHƠI (PVP)
+    # 4. KHU VỰC VẬT PHẨM & ĐUA NGỰA MULTIPLAYER
     pvp_cmd = (
-        "📦 `cgk crate` - Mở rương phần thưởng (Cần có key/tiền để mở lấy ngẫu nhiên XP, Xu).\n"
-        "🔮 `cgk lootbox` - Mở hộp quà bí ẩn (Tỉ lệ ra đồ hiếm hoặc trúng thưởng lớn cao hơn crate).\n"
-        "⚔️ `cgk battle @người_chơi <tiền>` - Thách đấu tay đôi (PvP). Cả 2 cùng cược tiền, hệ thống sẽ random người chiến thắng ăn trọn tiền cược!"
+        "📦 `cgk crate` - Mở rương phần thưởng (Nhận ngẫu nhiên XP, Xu).\n"
+        "🔮 `cgk lootbox` - Mở hộp quà bí ẩn (Tỉ lệ ra đồ hiếm cao hơn).\n"
+        "⚔️ `cgk battle @người_chơi <tiền>` - Thách đấu tay đôi PvP ăn trọn tiền cược.\n\n"
+        "**🏇 ĐUA NGỰA CHƠI CHUNG (MULTIPLAYER HORSE RACING)**\n"
+        "Trò chơi đặt cược tương tác thời gian thực cùng bạn bè trong Server.\n"
+        "👉 **Bước 1 (Vào phòng):** `cgk duangua <tiền/all> <số_ngựa_1_đến_4>`\n"
+        "*(Người đầu tiên gõ sẽ lập phòng làm Chủ phòng, bạn bè gõ tiếp để cược ké vào chung phòng)*\n"
+        "👉 **Bước 2 (Điều khiển - Chỉ dành cho Chủ phòng):**\n"
+        "• `cgk duangua start` - Phát lệnh xuất phát cho ngựa chạy kèm bình luận viên trực tiếp.\n"
+        "• `cgk duangua cancel` - Hủy phòng đua và hoàn trả 100% tiền cược cho mọi người.\n"
+        "💰 **Tỷ lệ thưởng:** Đoán trúng ngựa về đích đầu tiên ăn trọn **x3.5** tiền cược!"
     )
-    embed.add_field(name="🔥 HỆ THỐNG VẬT PHẨM & THÁCH ĐẤU", value=pvp_cmd, inline=False)
+    embed.add_field(name="🔥 VẬT PHẨM & TRƯỜNG ĐUA MULTIPLAYER", value=pvp_cmd, inline=False)
 
-    # 5. KHU VỰC LỆNH ADMIN (Chỉ Admin mới thấy)
+    # 5. KHU VỰC LỆNH ADMIN (Tự động ẩn/hiện)
     if ctx.author.guild_permissions.administrator:
         admin_cmd = (
             "⚙️ `cgk add @người_chơi <số_tiền>` - Bơm thêm tiền cho người chơi.\n"
@@ -1024,12 +1231,89 @@ async def dsgame(ctx):
         )
         embed.add_field(name="🛡️ LỆNH QUẢN TRỊ VIÊN", value=admin_cmd, inline=False)
 
-    # Footer trang trí
+    # Footer trang trí dưới cùng
     embed.set_footer(
         text=f"Người gọi lệnh: {ctx.author.name} • Tiền tố bot: cgk", 
         icon_url=ctx.author.avatar.url if ctx.author.avatar else None
     )
 
+    await ctx.send(embed=embed)
+    
+@bot.command(name="stats", aliases=["profile", "thongke", "me"])
+async def stats(ctx, member: discord.Member = None):
+    # Nếu không tag ai, bot sẽ tự động xem thống kê của chính người gõ lệnh
+    target = member or ctx.author
+    
+    # Lấy dữ liệu của người chơi từ cơ sở dữ liệu của bạn
+    u = get_user(target.id)
+    
+    # Đọc các chỉ số cơ bản (nếu chưa có thì mặc định là 0 để tránh lỗi code)
+    balance = u.get("balance", 0)
+    games_played = u.get("games_played", 0)
+    total_win_money = u.get("total_win_money", 0)
+    total_lose_money = u.get("total_lose_money", 0)
+    
+    # --- TÍNH TOÁN CÁC CHỈ SỐ NÂNG CAO ---
+    # 1. Tính hiệu số tài sản ròng (Lời hay Lỗ từ trước đến nay)
+    profit = total_win_money - total_lose_money
+    if profit > 0:
+        profit_str = f"📈 Lời: `+{profit:,}` xu"
+    elif profit < 0:
+        profit_str = f"📉 Lỗ: `-{abs(profit):,}` xu"
+    else:
+        profit_str = "⚖️ Hòa vốn (`0` xu)"
+
+    # 2. Tính Tỷ lệ Thắng (Win Rate) dựa trên số xu thắng/thua
+    # Nếu người chơi chưa từng chơi trận nào, tỷ lệ thắng mặc định là 0%
+    if total_win_money + total_lose_money > 0:
+        win_rate = (total_win_money / (total_win_money + total_lose_money)) * 100
+    else:
+        win_rate = 0.0
+
+    # --- TIẾN HÀNH VẼ GIAO DIỆN EMBED BẢNG THÀNH TÍCH ---
+    embed = discord.Embed(
+        title=f"📊 HỒ SƠ ĐỎ ĐEN - {target.name.upper()} 📊",
+        color=discord.Color.blue()
+    )
+    
+    # Hiển thị ảnh đại diện của người chơi làm Avatar nhỏ góc trên
+    if target.avatar:
+        embed.set_thumbnail(url=target.avatar.url)
+        
+    # Trường 1: Tài chính hiện tại
+    embed.add_field(
+        name="💰 TÀI SẢN HIỆN CÓ", 
+        value=f"• Ví tiền: **{balance:,}** xu\n• Tổng tài sản xếp hạng: #1", 
+        inline=False
+    )
+    
+    # Trường 2: Lịch sử sòng bài
+    stats_details = (
+        f"• Tổng số trận đã chơi: `{games_played:,}` ván\n"
+        f"• Tổng tiền thắng thu về: `+{total_win_money:,}` xu\n"
+        f"• Tổng tiền cược thua mất: `-{total_lose_money:,}` xu\n"
+        f"• Tỷ lệ phong độ: **{win_rate:.1f}%**"
+    )
+    embed.add_field(name="🎲 LỊCH SỬ CASINO", value=stats_details, inline=False)
+    
+    # Trường 3: Đánh giá tổng quan hiệu suất lời lỗ
+    embed.add_field(name="📊 HIỆU SUẤT ĐẦU TƯ", value=profit_str, inline=False)
+    
+    # Huy hiệu danh hiệu dựa trên số trận hoặc số tiền tài sản
+    if balance > 10000000000:
+        rank_title = "👑 Đại Gia Khét Tiếng"
+    elif games_played > 10000000:
+        rank_title = "🔥 Thần Bài Tái Thế"
+    elif profit < 0:
+        rank_title = "🤡 Chiến Thần Ra Đê"
+    else:
+        rank_title = "🌱 Cờ Bạc Tập Sự"
+        
+    embed.set_footer(
+        text=f"Danh hiệu: {rank_title} • Xem bởi: {ctx.author.name}",
+        icon_url=ctx.author.avatar.url if ctx.author.avatar else None
+    )
+    
     await ctx.send(embed=embed)
  
 app = Flask('')
