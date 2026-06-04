@@ -77,6 +77,12 @@ def update_user(user_id, key, value, mode="set"):
     else:
         db[uid][key] = value
     save_db(db)
+    
+    # Lấy level hiện tại để trả về
+    lvl = db[uid].get("level", 1) 
+    
+    # TRẢ VỀ 2 GIÁ TRỊ NHƯ BOT ĐANG YÊU CẦU
+    return is_up, lvl
 
 # --- SỰ KIỆN TỰ ĐỘNG CÀY XP & CỘNG TIỀN KHI LÊN CẤP ---
 @bot.event
