@@ -7,6 +7,8 @@ import asyncio
 import json
 import os
 import time
+from flask import Flask
+from threading import Thread
 
 # --- CẤU HÌNH HỆ THỐNG TỐI CAO ---
 OWNER_ID = 851328559301656606  # ID Chủ sòng của bạn
@@ -737,6 +739,19 @@ async def give(ctx, member: discord.Member, amount: int):
     save_db(db)
 
     await ctx.send(f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho {member.mention}!")
+ 
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "Bot đang chạy 24/7!"
+
+def run():
+  app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+    
 # --- KÍCH HOẠT HỆ THỐNG SÒNG BÀI CASINO ---
 bot.run(token)
