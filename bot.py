@@ -149,16 +149,6 @@ async def on_ready():
     print(f"🎰 SÒNG BÀI ONLINE: Bot {bot.user} đã sẵn sàng hoạt động mượt mà!")
 
 # --- [1] LỆNH ADMIN ĐỘC QUYỀN: BƠM TIỀN ---
-@bot.command(name="add")
-async def add_money(ctx, member: discord.Member = None, amount: int = None):
-    if ctx.author.id != OWNER_ID:
-        await ctx.send("❌ Bạn không có quyền hạn Nhà Cái tối cao để thực hiện lệnh này!")
-        return
-    if not member or not amount:
-        await ctx.send("❌ Cú pháp: `cgk add @tên_user <số_tiền>`")
-        return
-    update_user(member.id, "balance", amount, mode="add")
-    await ctx.send(f"👑 **Nhà Cái Tối Cao** đã bơm **+{amount:,}** xu vào ví của {member.mention}!")
 
 @bot.command(name="add")
 @commands.has_permissions(administrator=True) # Chỉ Admin mới được dùng
