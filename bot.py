@@ -69,19 +69,24 @@ def get_user(user_id):
     return db[uid]
 
 def update_user(user_id, key, value, mode="set"):
-    get_user(user_id) 
+    # 1. KHỞI TẠO BIẾN NGAY TỪ ĐẦU
+    is_up = False 
+    
+    get_user(user_id)
     db = load_db()
     uid = str(user_id)
+    
     if mode == "add":
         db[uid][key] += value
     else:
         db[uid][key] = value
+        
     save_db(db)
     
-    # Lấy level hiện tại để trả về
+    # Lấy level hiện tại
     lvl = db[uid].get("level", 1) 
     
-    # TRẢ VỀ 2 GIÁ TRỊ NHƯ BOT ĐANG YÊU CẦU
+    # 2. TRẢ VỀ BIẾN ĐÃ ĐƯỢC KHỞI TẠO
     return is_up, lvl
 
 # --- SỰ KIỆN TỰ ĐỘNG CÀY XP & CỘNG TIỀN KHI LÊN CẤP ---
