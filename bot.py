@@ -1052,16 +1052,7 @@ async def duangua(ctx, amount: str = None, horse_num: int = None):
             await ctx.send(f"✅ **{ctx.author.name}** đã tham gia phòng! Đặt **{bet:,} xu** vào Ngựa {horse_num}.")
     
 #---OTT---
-class OanTuTiView(discord.ui.View):
-    def __init__(self, host, guest, bet_amount):
-        super().__init__(timeout=60.0)
-        self.host = host
-        self.guest = guest
-        self.bet = bet_amount
-        self.choices = {host.id: None, guest.id: None}
-        self.message = None
-
-    async def check_result(self, interaction):
+async def check_result(self, interaction):
         if self.choices[self.host.id] and self.choices[self.guest.id]:
             self.stop()
             
@@ -1069,9 +1060,10 @@ class OanTuTiView(discord.ui.View):
             c2 = self.choices[self.guest.id]
             emoji_map = {"keo": "✌️ Kéo", "bua": "✊ Búa", "bao": "🖐️ Bao"}
             
+            await interaction.response.send_message("⚡ Trận đấu đang bắt đầu phân định...", ephemeral=True)
+            
             # --- HIỆU ỨNG TRẬN ĐẤU REAL-TIME ---
             embed_fight = discord.Embed(title="⚡ TRẬN CHIẾN ĐANG LÊN ĐẾN ĐỈNH ĐIỂM ⚡", color=discord.Color.orange())
-            embed_fight.set_thumbnail(url="https://i.imgur.com/7A2P6w8.gif") # Bạn có thể đổi link GIF hiệu ứng đấm nhau nếu muốn
             
             fight_frames = [
                 f"⚔️ **{self.host.name}** gồng nội công...\n⚔️ **{self.guest.name}** thủ thế...",
@@ -1081,11 +1073,12 @@ class OanTuTiView(discord.ui.View):
             
             for frame in fight_frames:
                 embed_fight.description = frame
-                await interaction.message.edit(embed=embed_fight, view=None)
-                await asyncio.sleep(1.2) # Chờ hiệu ứng chuyển cảnh
+                await self.message.edit(embed=embed_fight, view=None)
+                await asyncio.sleep(1.2)
 
-            # --- TÍNH TOÁN KẾT QUẢ ---
+            # --- TÍNH TOÁN KẾT QUẢ TRỰC TIẾP ---
             if c1 == c2:
+                # Hòa vốn trả lại tiền cho cả 2
                 update_user(self.host.id, "balance", self.bet, mode="add")
                 update_user(self.guest.id, "balance", self.bet, mode="add")
                 
@@ -1094,7 +1087,7 @@ class OanTuTiView(discord.ui.View):
                     description=f"**{self.host.name}** tung: {emoji_map[c1]}\n**{self.guest.name}** tung: {emoji_map[c2]}\n\n⚖️ Hai mãnh tướng võ công ngang ngửa! Tiền cược **{self.bet:,} xu** đã được trả về ví an toàn.",
                     color=discord.Color.light_grey()
                 )
-                await interaction.message.edit(embed=embed_res)
+                await self.message.edit(embed=embed_res)
                 return
 
             host_won = (c1 == "bua" and c2 == "keo") or (c1 == "keo" and c2 == "bao") or (c1 == "bao" and c2 == "bua")
@@ -1103,91 +1096,20 @@ class OanTuTiView(discord.ui.View):
             winner_name = self.host.name if host_won else self.guest.name
             loser_name = self.guest.name if host_won else self.host.name
             
+            # Người thắng ăn trọn tổng tiền cược của cả 2 bên (x2 tiền cược gốc)
             total_pool = self.bet * 2
-            res_win = xu_ly_jackpot_va_stats(winner_id, self.bet, total_pool)
-            res_lose = xu_ly_jackpot_va_stats(loser_id, self.bet, 0)
-            total_tax = res_win["tax"] + res_lose["tax"]
+            update_user(winner_id, "balance", total_pool, mode="add")
 
             embed_res = discord.Embed(
                 title=f"🏆 CHIẾN THẦN BẤT BẠI XUẤT HIỆN 🏆",
                 description=f"👑 Nhà vô địch: **{winner_name}**\n\n"
                             f"• **{self.host.name}** sử dụng: {emoji_map[c1]}\n"
                             f"• **{self.guest.name}** sử dụng: {emoji_map[c2]}\n\n"
-                            f"💰 **{winner_name}** khắc chế hoàn toàn đối thủ, ẵm trọn: **+{res_win['net_win']:,} xu**\n"
-                            f"💸 **{loser_name}** kiệt sức ngã gục, tổn thất: `-{self.bet:,}` xu\n\n"
-                            f"✨ *Quỹ sòng bài trích {total_tax:,} xu nạp vào hũ Jackpot!*",
+                            f"💰 **{winner_name}** khắc chế hoàn toàn đối thủ, ẵm trọn: **+{total_pool:,} xu**\n"
+                            f"💸 **{loser_name}** kiệt sức ngã gục, tổn thất: `-{self.bet:,}` xu",
                 color=discord.Color.gold()
             )
-            await interaction.message.edit(embed=embed_res)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id not in [self.host.id, self.guest.id]:
-            await interaction.response.send_message("❌ Bạn không có vé tham gia trận đấu này!", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="Kéo ✌️", style=discord.ButtonStyle.primary, custom_id="keo")
-    async def keo_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Đã tung chiêu rồi không thể đổi!", ephemeral=True)
-        self.choices[interaction.user.id] = "keo"
-        await interaction.response.send_message("You chose: ✌️ Kéo! Đã khóa chiêu ẩn danh thành công.", ephemeral=True)
-        await self.check_result(interaction)
-
-    @discord.ui.button(label="Búa ✊", style=discord.ButtonStyle.success, custom_id="bua")
-    async def bua_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Đã tung chiêu rồi không thể đổi!", ephemeral=True)
-        self.choices[interaction.user.id] = "bua"
-        await interaction.response.send_message("You chose: ✊ Búa! Đã khóa chiêu ẩn danh thành công.", ephemeral=True)
-        await self.check_result(interaction)
-
-    @discord.ui.button(label="Bao 🖐️", style=discord.ButtonStyle.danger, custom_id="bao")
-    async def bao_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.choices[interaction.user.id] is not None:
-            return await interaction.response.send_message("❌ Đã tung chiêu rồi không thể đổi!", ephemeral=True)
-        self.choices[interaction.user.id] = "bao"
-        await interaction.response.send_message("You chose: 🖐️ Bao! Đã khóa chiêu ẩn danh thành công.", ephemeral=True)
-        await self.check_result(interaction)
-
-    async def on_timeout(self):
-        for p_id in [self.host.id, self.guest.id]:
-            update_user(p_id, "balance", self.bet, mode="add")
-        try:
-            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do võ sĩ đứng im quá 60 giây! Tiền đã hoàn lại ví.**", embed=None, view=None)
-        except:
-            pass
-
-@bot.command(name="oantuti", aliases=["ott", "pqp"])
-async def oantuti(ctx, member: discord.Member = None, amount: str = None):
-    if not member or not amount:
-        return await ctx.send("❌ **Cú pháp:** `cgk oantuti @Tên_Bạn_Bè <số_tiền/all>`")
-        
-    if member.id == ctx.author.id: return await ctx.send("❌ Bạn không thể tự bóp cổ chính mình!")
-    if member.bot: return await ctx.send("❌ Bot không có tay để oẳn tù tì với bạn!")
-
-    u_host = get_user(ctx.author.id)
-    bet = u_host["balance"] if amount.lower() == "all" else int(amount) if amount.isdigit() else 0
-    
-    if bet <= 0 or bet > u_host["balance"]: return await ctx.send("❌ Tiền cược không hợp lệ hoặc ví của bạn rỗng!")
-    u_guest = get_user(member.id)
-    if u_guest["balance"] < bet: return await ctx.send(f"❌ Đối thủ (**{member.name}**) không đủ tiền theo kèo!")
-
-    update_user(ctx.author.id, "balance", -bet, mode="add")
-    update_user(member.id, "balance", -bet, mode="add")
-
-    embed_lobby = discord.Embed(
-        title="⚔️ ĐÀI ĐẤU OẲN TÙ TÌ SINH TỬ ⚔️",
-        description=f"🔥 **{ctx.author.mention}** đã dựng võ đài thách đấu **{member.mention}**!\n"
-                    f"💰 Quỹ cược đặt cược: **{bet:,} xu** mỗi người.\n\n"
-                    f"👇 Hãy nhấn chọn đòn đánh ẩn danh của bạn dưới đây. Trận đấu bắt đầu khi cả 2 đã chọn xong!",
-        color=discord.Color.dark_magenta()
-    )
-    
-    view = OanTuTiView(ctx.author, member, bet)
-    msg = await ctx.send(embed=embed_lobby, view=view)
-    view.message = msg
-    
+            await self.message.edit(embed=embed_res)
 #---KHOBAU---
 class SuperTreasureView(discord.ui.View):
     def __init__(self, author, bet_amount):
@@ -1195,186 +1117,111 @@ class SuperTreasureView(discord.ui.View):
         self.author = author
         self.bet = bet_amount
         self.message = None
-        
-        # 5 loại rương theo đúng yêu cầu của bạn
         self.chest_types = ['win_x3', 'win_x2', 'draw', 'lose_50', 'lose_100']
         random.shuffle(self.chest_types)
-        self.buttons = []
 
     async def process_chest(self, interaction: discord.Interaction, chest_index: int):
-        # 1. Khóa lập tức tất cả các nút bấm để người chơi không thể bấm gian lận lần 2
+        # Khóa tất cả các nút ngay lập tức
         for child in self.children:
             child.disabled = True
         
-        # Đổi màu nút người chơi đã chọn thành màu đỏ (Danger) để đánh dấu
         self.children[chest_index].style = discord.ButtonStyle.danger
         self.children[chest_index].label = f"Rương {chest_index + 1} 🔓"
-        await interaction.response.edit_message(view=self)
         
-        # 2. RUN ANIMATION: Hiệu ứng mở khóa rương hồi hộp từng giai đoạn
+        # Khung hình Loading 1
         embed_loading = discord.Embed(title="⚙️ ĐANG KHAI QUẬT RƯƠNG BÁU... ⚙️", color=discord.Color.light_grey())
+        embed_loading.description = f"⛏️ **{self.author.name}** đang dùng xẻng cạy nắp chiếc **Rương {chest_index + 1}**...\n⚡ *Nắp rương rỉ sét đang lung lay!*"
         
-        # Các khung hình chuyển động (Animation Frames)
+        await interaction.response.edit_message(embed=embed_loading, view=self)
+        await asyncio.sleep(1.0)
+        
+        # Khung hình Loading 2 & 3
         frames = [
-            f"⛏️ **{self.author.name}** đang dùng xẻng cạy nắp chiếc **Rương {chest_index + 1}**...\n⚡ *Nắp rương rỉ sét đang lung lay!*",
             f"🔓 **Rương {chest_index + 1} đã được mở khóa!**\n💨 *Một làn khói bụi cổ xưa tỏa ra nghi ngút... Bạn đang thò tay vào bên trong...*",
-            f"✨ **Đang lọc tiền vàng và cạm bẫy...**\n`[■■■■■■■■■■■■■■■■■■■■] 100%` Cất giấu bên trong là..."
+            f"✨ **Đang kiểm tra vật phẩm cất giấu...**\n`[■■■■■■■■■■■■■■■■■■■■] 100%` Kết quả là..."
         ]
         
         for frame in frames:
             embed_loading.description = frame
-            # Bạn có thể thêm một ảnh GIF loading đào đất ở đây nếu có link
-            embed_loading.set_thumbnail(url="https://i.imgur.com/7A2P6w8.gif") 
-            await self.message.edit(embed=embed_loading)
-            await asyncio.sleep(1.0) # Thời gian chờ giữa các khung hình (1 giây)
+            await interaction.message.edit(embed=embed_loading)
+            await asyncio.sleep(1.0)
 
-        # 3. HIỂN THỊ KẾT QUẢ CUỐI CÙNG VỚI HIỆU ỨNG MÀU SẮC RIÊNG
+        # --- XỬ LÝ KẾT QUẢ TRỰC TIẾP (KHÔNG QUA HÀM JACKPOT) ---
         result_type = self.chest_types[chest_index]
         embed_res = discord.Embed(title="🏴‍☠️ KẾT QUẢ KHAI QUẬT KHO BÁU 🏴‍☠️")
         
-        # Tạo sơ đồ tiết lộ bản đồ rương ván này
         type_to_emoji = {'win_x3': "👑 VIP", 'win_x2': "💎 NGỌC", 'draw': "🪵 RỖNG", 'lose_50': "⚠️ GAI", 'lose_100': "💥 MÌN"}
         map_reveal = " | ".join([f"【{type_to_emoji[t]}】" if i != chest_index else f"➡️**【{type_to_emoji[t]}】**" for i, t in enumerate(self.chest_types)])
 
-        # TH TỐT NHẤT: Rương Vàng x3
         if result_type == 'win_x3':
-            gross_win = self.bet * 3
-            res = xu_ly_jackpot_va_stats(self.author.id, self.bet, gross_win)
-            embed_res.color = 0xF1C40F # Màu vàng rực rỡ hoàng gia
-            embed_res.set_thumbnail(url="https://media.giphy.com/media/l0ExhcMymdL6TrZ84/giphy.gif") # Hiệu ứng tiền rơi ngập tràn
+            net_win = self.bet * 3
+            update_user(self.author.id, "balance", net_win, mode="add") # Cộng x3 tiền về ví
+            embed_res.color = 0xF1C40F
             embed_res.description = (
                 f"🥳 🎉 **HOÀNG GIA ĐẠI THẮNG!!!** 🎉 🥳\n\n"
-                f"Không thể tin nổi! Bạn đã chọn trúng chiếc **Rương Hoàng Gia 👑** quý hiếm nhất hòn đảo!\n"
-                f"💰 **Tiền thưởng siêu khủng:** `+{res['net_win']:,}` xu *(x3 tài sản)*\n\n"
-                f"✨ *Đã tự động trích đóng hũ Jackpot công cộng: {res['tax']:,} xu.*"
+                f"Không thể tin nổi! Bạn đã chọn trúng chiếc **Rương Hoàng Gia 👑** quý hiếm nhất!\n"
+                f"💰 **Tiền thưởng siêu khủng:** `+{net_win:,}` xu *(x3 tài sản)*"
             )
-
-        # TH TỐT: Rương Ngọc x2
         elif result_type == 'win_x2':
-            gross_win = self.bet * 2
-            res = xu_ly_jackpot_va_stats(self.author.id, self.bet, gross_win)
-            embed_res.color = 0x2ECC71 # Màu xanh lá của may mắn / ngọc bích
-            embed_res.set_thumbnail(url="https://media.giphy.com/media/3o6gDWzmAzrpi5DQU8/giphy.gif") # Hiệu ứng rương báu lấp lánh
+            net_win = self.bet * 2
+            update_user(self.author.id, "balance", net_win, mode="add") # Cộng x2 tiền về ví
+            embed_res.color = 0x2ECC71
             embed_res.description = (
                 f"💎 ✨ **THẮNG LỚN: RƯƠNG BẢO THẠCH!** ✨ 💎\n\n"
                 f"Tuyệt vời! Bạn lật mở được chiếc rương chứa đầy **Kim cương và Hồng ngọc 💎**!\n"
-                f"💰 **Tiền thưởng nhận về:** `+{res['net_win']:,}` xu *(x2 tài sản)*\n\n"
-                f"✨ *Đã tự động trích đóng hũ Jackpot công cộng: {res['tax']:,} xu.*"
+                f"💰 **Tiền thưởng nhận về:** `+{net_win:,}` xu *(x2 tài sản)*"
             )
-
-        # TH TRUNG BÌNH: Rương Rỗng Hòa Vốn
         elif result_type == 'draw':
-            gross_win = self.bet * 1
-            res = xu_ly_jackpot_va_stats(self.author.id, self.bet, gross_win)
-            embed_res.color = 0x3498DB # Màu xanh dương nhẹ nhàng an toàn
+            update_user(self.author.id, "balance", self.bet, mode="add") # Hoàn nguyên 100% vốn
+            embed_res.color = 0x3498DB
             embed_res.description = (
                 f"🪵 🤔 **HÒA VỐN: RƯƠNG GỖ TRỐNG RỖNG!** 🤔 🪵\n\n"
-                f"Bên trong chiếc rương này hoàn toàn không có bẫy, nhưng cũng chẳng có vàng. Chỉ có một mảnh giấy ghi chữ: *Chúc may mắn lần sau!*\n"
-                f"⚖️ Hệ thống hoàn trả lại nguyên vẹn tiền đặt cược: `{res['net_win']:,}` xu.\n\n"
-                f"✨ *(Ván đấu vẫn trích nhẹ {res['tax']:,} xu nạp hũ)*"
+                f"Bên trong chiếc rương này hoàn toàn trống rỗng. Hệ thống hoàn trả lại tiền gốc ban đầu cho bạn: `{self.bet:,}` xu."
             )
-
-        # TH XẤU: Bẫy Gai trừ 50% tiền
         elif result_type == 'lose_50':
             half_back = self.bet // 2
-            res = xu_ly_jackpot_va_stats(self.author.id, half_back, 0)
-            update_user(self.author.id, "balance", half_back, mode="add")
-            embed_res.color = 0xE67E22 # Màu cam cảnh báo nguy hiểm
+            update_user(self.author.id, "balance", half_back, mode="add") # Chỉ trả lại 50% vốn
+            embed_res.color = 0xE67E22
             embed_res.description = (
                 f"⚠️ 🩸 **THIỆT HẠI: SẬP BẪY GAI CỔ!** 🩸 ⚠️\n\n"
-                f"Á! Khi vừa mở nắp rương, một hệ thống bẫy tên gai phóng ra. Bạn phải vứt bỏ lại một nửa hành trang để tháo chạy thoát thân!\n"
-                f"💸 **Tổn thất mất:** `-{half_back:,}` xu\n"
-                f"🛡️ **Giữ lại được:** `{half_back:,}` xu hoàn về ví.\n\n"
-                f"✨ *(Trích hũ Jackpot từ phần tiền rơi mất: {res['tax']:,} xu)*"
+                f"Á! Một hệ thống bẫy tên gai phóng ra. Bạn phải vứt bỏ lại một nửa hành trang để tháo chạy!\n"
+                f"💸 **Tổn thất mất:** `-{half_back:,}` xu | **Giữ lại được:** `{half_back:,}` xu hoàn về ví."
             )
-
-        # TH TỆ NHẤT: Bẫy Mìn bay sạch 100% tiền
         elif result_type == 'lose_100':
-            res = xu_ly_jackpot_va_stats(self.author.id, self.bet, 0)
-            embed_res.color = 0xE74C3C # Màu đỏ đậm chết chóc
-            embed_res.set_thumbnail(url="https://media.giphy.com/media/l0IxYWDltdHEqv9f2/giphy.gif") # Hiệu ứng nổ tung màn hình
+            # Thua 100% thì không cộng lại gì cả (tiền đã bị trừ lúc gõ lệnh)
+            embed_res.color = 0xE74C3C
             embed_res.description = (
                 f"💥 💀 **ĐẠI HỌA: KÍCH NỔ BẪY MÌN!!!** 💀 💥\n\n"
-                f"Sai lầm tai hại! Chiếc rương này là một cái bẫy thuốc nổ TNT cực mạnh! Tiếng nổ vang trời hất văng bạn ra biển!\n"
-                f"💸 **Trắng tay:** Bạn đánh rơi toàn bộ `-{self.bet:,}` xu xuống vực sâu.\n\n"
-                f"✨ *Hệ thống nhặt lại {res['tax']:,} xu sót lại từ vụ nổ để nạp vào hũ Jackpot công cộng.*"
+                f"Sai lầm tai hại! Chiếc rương này là một cái bẫy thuốc nổ TNT cực mạnh! Bạn đánh rơi toàn bộ `-{self.bet:,}` xu xuống vực sâu."
             )
 
-        # Thêm bảng thống kê tiết lộ vị trí các rương cực kỳ trực quan
-        embed_res.add_field(
-            name="👁️ BẢN ĐỒ TIẾT LỘ VỊ TRÍ TOÀN BỘ CÁC RƯƠNG VÁN NÀY", 
-            value=f"\n`{map_reveal}`\n\n*([Mũi tên ➡️] chỉ chiếc rương bạn đã chọn)*", 
-            inline=False
-        )
-        embed_res.set_footer(text=f"Trò chơi được vận hành bởi sòng bài CGK • Thợ săn: {self.author.name}")
+        embed_res.add_field(name="👁️ BẢN ĐỒ TIẾT LỘ VỊ TRÍ TOÀN BỘ CÁC RƯƠNG VÁN NÀY", value=f"`{map_reveal}`", inline=False)
+        embed_res.set_footer(text=f"Thợ săn: {self.author.name}")
         
-        # Xóa hoàn toàn các nút bấm sau khi đã hiển thị xong kết quả
-        await self.message.edit(embed=embed_res, view=None)
+        await interaction.message.edit(embed=embed_res, view=None)
+        self.stop()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
-            await interaction.response.send_message("❌ Đây là khu vực thám hiểm riêng của người khác! Hãy tự gõ `cgk khobau` để mở bãi đào riêng nhé.", ephemeral=True)
+            await interaction.response.send_message("❌ Đây là khu vực thám hiểm riêng của người khác!", ephemeral=True)
             return False
         return True
 
-    # Tạo 5 nút bấm xanh lam (Primary Style) xếp hàng ngang đẹp đẽ
     @discord.ui.button(label="Rương 1 🔒", style=discord.ButtonStyle.primary, custom_id="c1")
     async def c1(self, interaction: discord.Interaction, button: discord.ui.Button): await self.process_chest(interaction, 0)
-
     @discord.ui.button(label="Rương 2 🔒", style=discord.ButtonStyle.primary, custom_id="c2")
     async def c2(self, interaction: discord.Interaction, button: discord.ui.Button): await self.process_chest(interaction, 1)
-
     @discord.ui.button(label="Rương 3 🔒", style=discord.ButtonStyle.primary, custom_id="c3")
     async def c3(self, interaction: discord.Interaction, button: discord.ui.Button): await self.process_chest(interaction, 2)
-
     @discord.ui.button(label="Rương 4 🔒", style=discord.ButtonStyle.primary, custom_id="c4")
     async def c4(self, interaction: discord.Interaction, button: discord.ui.Button): await self.process_chest(interaction, 3)
-
     @discord.ui.button(label="Rương 5 🔒", style=discord.ButtonStyle.primary, custom_id="c5")
     async def c5(self, interaction: discord.Interaction, button: discord.ui.Button): await self.process_chest(interaction, 4)
 
     async def on_timeout(self):
-        # Trả lại tiền cược nếu người chơi treo máy không chịu chọn
         update_user(self.author.id, "balance", self.bet, mode="add")
-        try:
-            await self.message.edit(content=f"🛑 {self.author.mention} **đã bỏ dở cuộc thám hiểm quá lâu! Bản đồ bị hủy, tiền cược đã được hoàn trả.**", embed=None, view=None)
-        except:
-            pass
-
-@bot.command(name="khobau", aliases=["kb", "treasure"])
-async def khobau(ctx, amount: str = None):
-    if not amount:
-        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk khobau <số_tiền/all>`")
-
-    u = get_user(ctx.author.id)
-    bet = u["balance"] if amount.lower() == "all" else int(amount) if amount.isdigit() else 0
-    
-    if bet <= 0 or bet > u["balance"]:
-        return await ctx.send("❌ Số dư ví không đủ hoặc số tiền đặt cược không hợp lệ!")
-
-    # Tạm trừ tiền cược để giữ chân người chơi bước vào sảnh chờ
-    update_user(ctx.author.id, "balance", -bet, mode="add")
-
-    embed_lobby = discord.Embed(
-        title="🏴‍☠️ ĐẢO GIẤU VÀNG - ĐẠI CHIẾN MỞ RƯƠNG 🏴‍☠️",
-        description=f"🤠 Chào mừng thợ săn tiền thưởng **{ctx.author.mention}**!\n"
-                    f"💰 Chi phí thuê thuyền và bản đồ ván này: **{bet:,} xu**\n\n"
-                    f"✨ **QUY LUẬT SINH TỒN TRÊN ĐẢO:**\n"
-                    f"Trước mắt bạn là **5 chiếc rương đang khóa chặt [🔒]**. Trong số đó đã được xáo trộn ngẫu nhiên tuyệt đối:\n"
-                    f"• 👑 **1 Rương Hoàng Gia:** Phát tài nhân **x3** tiền cược.\n"
-                    f"• 💎 **1 Rương Bảo Thạch:** Thắng lớn nhân **x2** tiền cược.\n"
-                    f"• 🪵 **1 Rương Rỗng Tuếch:** May mắn thoát nạn, **Hoàn vốn 100%**.\n"
-                    f"• ⚠️ **1 Bẫy Gai Cổ:** Sập bẫy nguy hiểm, **Bị trừ mất 50%** tiền.\n"
-                    f"• 💥 **1 Quả Mìn Cướp Biển:** Nổ tung, **Mất trắng 100%** tiền cược.\n\n"
-                    f"👇 *Hãy vận dụng giác quan thứ sáu và click chọn chiếc rương định mệnh của bạn bên dưới!*",
-        color=0x9B59B6 # Màu tím huyền bí
-    )
-    # Ảnh GIF đảo hải tặc lấp lánh cực đẹp làm ảnh nền chính cho sảnh đợi
-    embed_lobby.set_image(url="https://i.imgur.com/vHqR8zY.gif") 
-
-    view = SuperTreasureView(ctx.author, bet)
-    msg = await ctx.send(embed=embed_lobby, view=view)
-    view.message = msg
+        try: await self.message.edit(content=f"🛑 {self.author.mention} **đã bỏ dở cuộc thám hiểm quá lâu! Bản đồ bị hủy, tiền cược đã được hoàn trả.**", embed=None, view=None)
+        except: pass
     
 # --- [10] HỆ THỐNG MỞ HÒM THÚ CƯNG (LOOTBOX) ---
 @bot.command(name="lootbox")
