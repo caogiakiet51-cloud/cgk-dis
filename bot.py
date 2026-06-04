@@ -228,7 +228,6 @@ async def slots(ctx, amount: str = None):
         await ctx.send("❌ Số tiền cược không hợp lệ hoặc số dư không đủ!")
         return
 
-    # Danh sách vật phẩm nguyên bản theo ý bạn
     items = ["🍎", "🍇", "🍊", "🥭", "💎"]
     
     multipliers = {
@@ -239,10 +238,18 @@ async def slots(ctx, amount: str = None):
         "💎": 15
     }
     
-    is_win = random.random() < 0.50
+    # --- CẤU HÌNH TỶ LỆ PHẦN TRĂM THEO Ý BẠN ---
+    # Các lựa chọn có thể xảy ra
+    options = ["LOSE", "🍎", "🍇", "🍊", "🥭", "💎"]
+    # Tỷ lệ phần trăm tương ứng (Tổng = 100)
+    weights = [40, 25, 15, 10, 7, 3]
     
-    if is_win:
-        winning_item = random.choice(items)
+    # Bot quay chọn ngẫu nhiên 1 kết quả dựa trên tỷ lệ trên
+    final_outcome = random.choices(options, weights=weights, k=1)[0]
+    
+    if final_outcome != "LOSE":
+        # THẮNG: Cả 3 ô đều ra vật phẩm trúng giải
+        winning_item = final_outcome
         r1 = r2 = r3 = winning_item
         
         mul = multipliers[winning_item]
@@ -250,15 +257,17 @@ async def slots(ctx, amount: str = None):
         update_user(ctx.author.id, "balance", win_amount, mode="add")
         
         if winning_item == "💎":
-            result_msg = f"and won {win_amount:,} 🎉 🔥 NỔ HŨ THẮNG LỚN CỦA X15! 🔥 🎉"
+            result_msg = f"and won {win_amount:,} 🎉 🔥 NỔ HŨ THẮNG LỚN X15! 🔥 🎉"
         else:
             result_msg = f"and won {win_amount:,} (Trúng 3 {winning_item} x{mul}) 🥳"
     else:
+        # THUA: Ra 3 cái khác nhau (Tỷ lệ 40%)
+        # Lấy mẫu ngẫu nhiên 3 vật phẩm khác nhau hoàn toàn từ danh sách
         r1, r2, r3 = random.sample(items, 3)
         update_user(ctx.author.id, "balance", -bet, mode="add")
         result_msg = f"and lost {bet:,}"
         
-# --- HIỆU ỨNG QUAY QUAY CHUYÊN NGHIỆP ---
+    # --- HIỆU ỨNG QUAY QUAY CHUYÊN NGHIỆP ---
     msg = await ctx.send(f"    ___SLOTS___\n  | 🔄 | 🔄 | 🔄 | cgk bet {bet:,}")
 
     # Chạy vòng lặp để tạo hiệu ứng quay 4 lần
@@ -564,6 +573,7 @@ class BauCuaView(ui.View):
         # Dùng edit_original_response để cập nhật tin nhắn hiện có mà không gây lỗi
         await interaction.edit_original_response(content=final_content, view=self)
 
+
 @bot.command(name="bc")
 async def baucua(ctx, amount: str):
     u = get_user(ctx.author.id)
@@ -596,6 +606,215 @@ async def open_crate(ctx):
     save_db(db)
     
     await ctx.send(f"📦 **{ctx.author.name}** đã chi 10,000 xu khui hòm vũ khí và nhận được: **{result}**!")
+
+# ---BCR---
+@bot.command(name="bcr", aliases=["baccarat", "bac"])
+async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None, choice2: str = None):
+    # --- BƯỚC 1: KIỂM TRA CÚ PHÁP BAN ĐẦU ---
+    if not amount1 or not choice1:
+        msg = (
+            "❌ **Cú pháp lệnh không đúng!**\n"
+            "👉 **Cược đơn:** `cgk bcr <số_tiền> <cửa>`\n"
+            "👉 **Cược kép (Cả cửa chính & cửa đôi):** `cgk bcr <tiền_1> <cửa_1> <tiền_2> <cửa_2>`\n\n"
+            "**Các cửa cược hợp lệ:**\n"
+            "• `con` / `cai` / `hoa`\n"
+            "• `condoi` / `caidoi`\n\n"
+            "Ví dụ: `cgk bcr 5000 con 1000 condoi`"
+        )
+        await ctx.send(msg)
+        return
+
+    u = get_user(ctx.author.id)
+    total_bet = 0
+    bets = {} # Lưu thông tin các cửa đặt và số tiền tương ứng
+
+    # Hàm chuẩn hóa tên cửa cược
+    def clean_choice(c):
+        c = c.lower()
+        if c in ["cái", "cai", "b"]: return "cai"
+        if c in ["hòa", "hoa", "t"]: return "hoa"
+        if c in ["con", "p"]: return "con"
+        if c in ["condôi", "condoi"]: return "condoi"
+        if c in ["cáidôi", "caidôi", "caidoi"]: return "caidoi"
+        return None
+
+    # --- XỬ LÝ CỬA CƯỢC THỨ 1 ---
+    c1 = clean_choice(choice1)
+    if not c1:
+        return await ctx.send(f"❌ Cửa cược `{choice1}` không hợp lệ!")
+        
+    if amount1.lower() == "all":
+        bet1 = u["balance"]
+    else:
+        try: bet1 = int(amount1)
+        except ValueError: return await ctx.send("❌ Số tiền cược 1 phải là số nguyên!")
+        
+    if bet1 <= 0: return await ctx.send("❌ Số tiền cược phải lớn hơn 0!")
+    bets[c1] = bet1
+    total_bet += bet1
+
+    # --- XỬ LÝ CỬA CƯỢC THỨ 2 (NẾU CÓ) ---
+    if amount2 and choice2:
+        c2 = clean_choice(choice2)
+        if not c2:
+            return await ctx.send(f"❌ Cửa cược `{choice2}` không hợp lệ!")
+            
+        if c1 == c2:
+            return await ctx.send("❌ Bạn không thể đặt trùng một cửa 2 lần trong một lượt!")
+            
+        try: bet2 = int(amount2)
+        except ValueError: return await ctx.send("❌ Số tiền cược 2 phải là số nguyên!")
+        
+        if bet2 <= 0: return await ctx.send("❌ Số tiền cược phải lớn hơn 0!")
+        bets[c2] = bet2
+        total_bet += bet2
+
+    # Kiểm tra tổng tiền có đủ tài khoản không
+    if total_bet > u["balance"]:
+        return await ctx.send(f"❌ Bạn không đủ tiền! Tổng tiền cược của bạn là **{total_bet:,} xu**, nhưng bạn chỉ có **{u['balance']:,} xu**.")
+
+    # Trừ tổng tiền cược ngay từ đầu ván
+    update_user(ctx.author.id, "balance", -total_bet, mode="add")
+
+    # --- BƯỚC 2: LOGIC BÀI TÂY (CHIA TRONG RAM) ---
+    def get_card():
+        suits = ["♠", "♣", "♥", "♦"]
+        ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+        r = random.choice(ranks)
+        s = random.choice(suits)
+        val = 0 if r in ["10", "J", "Q", "K"] else (1 if r == "A" else int(r))
+        return f"{r}{s}", val, r
+
+    p1, p1_v, p1_r = get_card()
+    p2, p2_v, p2_r = get_card()
+    b1, b1_v, b1_r = get_card()
+    b2, b2_v, b2_r = get_card()
+
+    is_player_pair = (p1_r == p2_r)
+    is_banker_pair = (b1_r == b2_r)
+
+    p_score_2 = (p1_v + p2_v) % 10
+    b_score_2 = (b1_v + b2_v) % 10
+
+    p_cards = [p1, p2]
+    b_cards = [b1, b2]
+
+    has_p3, has_b3 = False, False
+    if p_score_2 < 8 and b_score_2 < 8:
+        p3_v = -1
+        if p_score_2 <= 5:
+            p3, p3_v, _ = get_card()
+            p_cards.append(p3)
+            has_p3 = True
+
+        if b_score_2 <= 2 or (b_score_2 == 3 and p3_v != 8) or \
+           (b_score_2 == 4 and p3_v in [2, 3, 4, 5, 6, 7]) or \
+           (b_score_2 == 5 and p3_v in [4, 5, 6, 7]) or \
+           (b_score_2 == 6 and p3_v in [6, 7]):
+            b3, b3_v, _ = get_card()
+            b_cards.append(b3)
+            has_b3 = True
+
+    p_score_final = sum([0 if c[:-1] in ["10", "J", "Q", "K"] else (1 if c[:-1] == "A" else int(c[:-1])) for c in p_cards]) % 10
+    b_score_final = sum([0 if c[:-1] in ["10", "J", "Q", "K"] else (1 if c[:-1] == "A" else int(c[:-1])) for c in b_cards]) % 10
+
+    if p_score_final > b_score_final: main_result = "con"
+    elif b_score_final > p_score_final: main_result = "cai"
+    else: main_result = "hoa"
+
+    # --- BƯỚC 3: HIỆU ỨNG LẬT BÀI TỪNG LÁ ---
+    embed = discord.Embed(title="🃏 CASINO BACCARAT 🃏", color=discord.Color.blue())
+    embed.add_field(name="🧑 PLAYER (Con)", value="Bài: ` 🎴 | 🎴 `\nĐiểm: **?**", inline=True)
+    embed.add_field(name="🏢 BANKER (Cái)", value="Bài: ` 🎴 | 🎴 `\nĐiểm: **?**", inline=True)
+    embed.add_field(name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Đang chia bài...", inline=False)
+    msg = await ctx.send(embed=embed)
+
+    await asyncio.sleep(0.6)
+    embed.set_field_at(0, name="🧑 PLAYER (Con)", value=f"Bài: ` {p1} | 🎴 `\nĐiểm: **?**", inline=True)
+    await msg.edit(embed=embed)
+
+    await asyncio.sleep(0.6)
+    embed.set_field_at(1, name="🏢 BANKER (Cái)", value=f"Bài: ` {b1} | 🎴 `\nĐiểm: **?**", inline=True)
+    await msg.edit(embed=embed)
+
+    await asyncio.sleep(0.6)
+    p_pair_str = " *(ĐÔI CON!)*" if is_player_pair else ""
+    embed.set_field_at(0, name="🧑 PLAYER (Con)", value=f"Bài: ` {p1} | {p2} `{p_pair_str}\nĐiểm: **{p_score_2}**", inline=True)
+    await msg.edit(embed=embed)
+
+    await asyncio.sleep(0.6)
+    b_pair_str = " *(ĐÔI CÁI!)*" if is_banker_pair else ""
+    embed.set_field_at(1, name="🏢 BANKER (Cái)", value=f"Bài: ` {b1} | {b2} `{b_pair_str}\nĐiểm: **{b_score_2}**", inline=True)
+    await msg.edit(embed=embed)
+
+    if has_p3:
+        await asyncio.sleep(0.8)
+        embed.set_field_at(2, name="📊 KẾT QUẢ TRẬN ĐẤU", value="Player rút lá thứ 3...", inline=False)
+        await msg.edit(embed=embed)
+        await asyncio.sleep(0.8)
+        embed.set_field_at(0, name="🧑 PLAYER (Con)", value=f"Bài: ` {p1} | {p2} | {p3} `{p_pair_str}\nĐiểm: **{p_score_final}**", inline=True)
+        await msg.edit(embed=embed)
+
+    if has_b3:
+        await asyncio.sleep(0.8)
+        embed.set_field_at(2, name="📊 KẾT QUẢ TRẬN ĐẤU", value="Banker rút lá thứ 3...", inline=False)
+        await msg.edit(embed=embed)
+        await asyncio.sleep(0.8)
+        embed.set_field_at(1, name="🏢 BANKER (Cái)", value=f"Bài: ` {b1} | {b2} | {b3} `{b_pair_str}\nĐiểm: **{b_score_final}**", inline=True)
+        await msg.edit(embed=embed)
+
+    # --- BƯỚC 4: TÍNH TOÁN KẾT QUẢ ĐA CỬA ---
+    await asyncio.sleep(0.5)
+    win_money = 0
+    detail_msg = []
+
+    # Kiểm tra từng cửa trong danh sách cược của người chơi
+    for door, bet_amt in bets.items():
+        is_door_win = False
+        mul = 0
+        
+        if door == "con" and main_result == "con": is_door_win = True; mul = 2
+        elif door == "cai" and main_result == "cai": is_door_win = True; mul = 1.95
+        elif door == "hoa" and main_result == "hoa": is_door_win = True; mul = 9
+        elif door == "condoi" and is_player_pair: is_door_win = True; mul = 12
+        elif door == "caidoi" and is_banker_pair: is_door_win = True; mul = 12
+
+        if is_door_win:
+            prize = int(bet_amt * mul)
+            win_money += prize
+            detail_msg.append(f"✅ Thắng cửa **{door.upper()}**: +{prize:,} xu (x{mul})")
+        else:
+            detail_msg.append(f"❌ Thua cửa **{door.upper()}**: -{bet_amt:,} xu")
+
+    # Xử lý biến động tài sản cuối cùng
+    net_profit = win_money - total_bet
+    if win_money > 0:
+        update_user(ctx.author.id, "balance", win_money, mode="add")
+        
+    if net_profit > 0:
+        status_msg = f"🎉 **BẠN ĐÃ THẮNG CHUNG CUỘC!** Lời **+{net_profit:,} xu**."
+        embed.color = discord.Color.green()
+    elif net_profit < 0:
+        status_msg = f"💸 **BẠN ĐÃ THUA CHUNG CUỘC!** Lỗ **{net_profit:,} xu**."
+        embed.color = discord.Color.red()
+    else:
+        status_msg = "⚖️ **HÒA VỐN!** Không tăng không giảm số dư."
+        embed.color = discord.Color.gold()
+
+    is_up, lvl = update_user(ctx.author.id, "xp", 15, mode="add")
+
+    win_doors = [main_result.upper()]
+    if is_player_pair: win_doors.append("ĐÔI CON (CONDOI)")
+    if is_banker_pair: win_doors.append("ĐÔI CÁI (CAIDOI)")
+
+    # Hiển thị chi tiết từng cửa đặt
+    history_str = "\n".join(detail_msg)
+    embed.set_field_at(2, name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Cửa xuất hiện: **{', '.join(win_doors)}**\n\n{history_str}\n\n**Kết luận:** {status_msg}", inline=False)
+    
+    if is_up:
+        embed.set_footer(text=f"🎉 Xuất sắc! Bạn đã thăng cấp lên Level {lvl}!")
+        
+    await msg.edit(embed=embed)
 
 # --- [10] HỆ THỐNG MỞ HÒM THÚ CƯNG (LOOTBOX) ---
 @bot.command(name="lootbox")
@@ -710,6 +929,7 @@ async def top(ctx):
         
     await ctx.send(msg)
     
+# ---CHO TIỀN---
 @bot.command(name="give")
 async def give(ctx, member: discord.Member, amount: int):
     # 1. Kiểm tra số tiền hợp lệ
@@ -739,6 +959,74 @@ async def give(ctx, member: discord.Member, amount: int):
     save_db(db)
 
     await ctx.send(f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho {member.mention}!")
+ 
+#--- DSGAME ---
+@bot.command(name="dsgame", aliases=["help", "menu", "hd"])
+async def dsgame(ctx):
+    # Tạo bảng Embed giao diện chính
+    embed = discord.Embed(
+        title="🎰 TỔNG HỢP LỆNH HỆ THỐNG CASINO 🎰",
+        description=f"Xin chào {ctx.author.mention}! Dưới đây là toàn bộ danh sách trò chơi và tính năng bạn có thể trải nghiệm.",
+        color=discord.Color.gold()
+    )
+    
+    if bot.user.avatar:
+        embed.set_thumbnail(url=bot.user.avatar.url)
+
+    # 1. KHU VỰC TÀI CHÍNH & CÁ NHÂN
+    economy_cmd = (
+        "💳 `cgk cash` - Xem số dư tài khoản, Level và XP hiện tại.\n"
+        "🎁 `cgk daily` - Điểm danh nhận xu và phần thưởng mỗi ngày.\n"
+        "💸 `cgk give @người_chơi <số_tiền>` - Chuyển tiền cho người khác."
+    )
+    embed.add_field(name="🏦 HỆ THỐNG TÀI CHÍNH", value=economy_cmd, inline=False)
+
+    # 2. KHU VỰC MINI-GAMES (CÁ CƯỢC NHANH)
+    minigame_cmd = (
+        "🪙 `cgk cf <tiền> <tài/xỉu>` - Coinflip (Tung đồng xu may rủi).\n"
+        "🎰 `cgk s <tiền/all>` - Quay Slots hoa quả nổ hũ x15.\n"
+        "🎲 `cgk tx <tiền> <tài/xỉu>` - Đổ xúc xắc Tài Xỉu.\n"
+        "🔢 `cgk cl <tiền> <chẵn/lẻ>` - Cược Chẵn Lẻ cơ bản.\n"
+        "🦀 `cgk bc <tiền> <vật_phẩm>` - Lắc Bầu Cua tôm cá."
+    )
+    embed.add_field(name="🎲 MINI GAMES GIẢI TRÍ", value=minigame_cmd, inline=False)
+
+    # 3. KHU VỰC GAME BÀI (CARD GAMES) & BACCARAT CHI TIẾT
+    card_cmd = (
+        "🃏 `cgk bj <tiền>` - Chơi Xì Dách (Blackjack) đọ trí với nhà cái.\n"
+        "🎴 `cgk cao <tiền>` - Chơi Bài Cào 3 lá.\n\n"
+        "**👑 BACCARAT (LỆNH: `cgk bcr`)**\n"
+        "Các cửa: `con` (x2), `cai` (x1.95), `hoa` (x9), `condoi` (x12), `caidoi` (x12).\n"
+        "👉 **Cách 1 (Cược Đơn):** `cgk bcr <tiền> <cửa>`\n"
+        "*(VD: `cgk bcr 5000 con` - Đặt 5K vào cửa Player)*\n"
+        "👉 **Cách 2 (Cược Kép):** `cgk bcr <tiền_1> <cửa_1> <tiền_2> <cửa_2>`\n"
+        "*(VD: `cgk bcr 5000 con 1000 condoi` - Đặt 5K cửa Player & 1K cửa Đôi Con)*"
+    )
+    embed.add_field(name="♠️ CASINO GAME BÀI", value=card_cmd, inline=False)
+
+    # 4. KHU VỰC VẬT PHẨM & TƯƠNG TÁC NGƯỜI CHƠI (PVP)
+    pvp_cmd = (
+        "📦 `cgk crate` - Mở rương phần thưởng (Cần có key/tiền để mở lấy ngẫu nhiên XP, Xu).\n"
+        "🔮 `cgk lootbox` - Mở hộp quà bí ẩn (Tỉ lệ ra đồ hiếm hoặc trúng thưởng lớn cao hơn crate).\n"
+        "⚔️ `cgk battle @người_chơi <tiền>` - Thách đấu tay đôi (PvP). Cả 2 cùng cược tiền, hệ thống sẽ random người chiến thắng ăn trọn tiền cược!"
+    )
+    embed.add_field(name="🔥 HỆ THỐNG VẬT PHẨM & THÁCH ĐẤU", value=pvp_cmd, inline=False)
+
+    # 5. KHU VỰC LỆNH ADMIN (Chỉ Admin mới thấy)
+    if ctx.author.guild_permissions.administrator:
+        admin_cmd = (
+            "⚙️ `cgk add @người_chơi <số_tiền>` - Bơm thêm tiền cho người chơi.\n"
+            "*(Chỉ Quản trị viên mới nhìn thấy mục này)*"
+        )
+        embed.add_field(name="🛡️ LỆNH QUẢN TRỊ VIÊN", value=admin_cmd, inline=False)
+
+    # Footer trang trí
+    embed.set_footer(
+        text=f"Người gọi lệnh: {ctx.author.name} • Tiền tố bot: cgk", 
+        icon_url=ctx.author.avatar.url if ctx.author.avatar else None
+    )
+
+    await ctx.send(embed=embed)
  
 app = Flask('')
 
