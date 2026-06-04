@@ -1061,19 +1061,16 @@ class OanTuTiView(discord.ui.View):
         self.choices = {host.id: None, guest.id: None}
         self.message = None
 
-    async def check_result(self, interaction: discord.Interaction):
-        # Kiểm tra nếu cả hai người chơi đều đã đưa ra lựa chọn
+    async def check_result(self):
+        # Kiểm tra điều kiện: Cả hai người phải chọn xong xuôi
         if self.choices[self.host.id] and self.choices[self.guest.id]:
-            self.stop() # Dừng nhận tương tác từ view
+            self.stop() # Khóa view, không nhận thêm lượt bấm nào nữa
             
             c1 = self.choices[self.host.id]
             c2 = self.choices[self.guest.id]
             emoji_map = {"keo": "✌️ Kéo", "bua": "✊ Búa", "bao": "🖐️ Bao"}
             
-            # Giải phóng interaction ẩn danh lập tức để tránh lỗi giao diện của Discord
-            await interaction.response.send_message("⚡ Hai đấu thủ đã chọn xong! Trận đấu bắt đầu...", ephemeral=True)
-            
-            # --- HIỆU ỨNG CHIẾN ĐẤU REAL-TIME ---
+            # --- HIỆU ỨNG CHIẾN ĐẤU REAL-TIME (Sửa trực tiếp tin nhắn công khai) ---
             embed_fight = discord.Embed(title="⚡ TRẬN CHIẾN ĐANG LÊN ĐẾN ĐỈNH ĐIỂM ⚡", color=discord.Color.orange())
             
             fight_frames = [
@@ -1087,9 +1084,9 @@ class OanTuTiView(discord.ui.View):
                 await self.message.edit(embed=embed_fight, view=None)
                 await asyncio.sleep(1.2)
 
-            # --- TÍNH TOÁN KẾT QUẢ VÀ HOÀN TRẢ/TRAO THƯỞNG ---
+            # --- TÍNH TOÁN KẾT QUẢ VÀ TRAO THƯỞNG ---
             if c1 == c2:
-                # Trường hợp Hoà: Trả lại số tiền cược gốc ban đầu cho cả 2 bên
+                # Hòa: Hoàn trả lại tiền cược gốc cho cả 2 bên
                 update_user(self.host.id, "balance", self.bet, mode="add")
                 update_user(self.guest.id, "balance", self.bet, mode="add")
                 
@@ -1101,14 +1098,14 @@ class OanTuTiView(discord.ui.View):
                 await self.message.edit(embed=embed_res)
                 return
 
-            # Xác định điều kiện người thách đấu (host) thắng
+            # Xác định người thắng cuộc
             host_won = (c1 == "bua" and c2 == "keo") or (c1 == "keo" and c2 == "bao") or (c1 == "bao" and c2 == "bua")
             winner_id = self.host.id if host_won else self.guest.id
             loser_id = self.guest.id if host_won else self.host.id
             winner_name = self.host.name if host_won else self.guest.name
             loser_name = self.guest.name if host_won else self.host.name
             
-            # Người thắng ăn trọn tổng tiền cược của cả 2 bên (x2 tiền cược)
+            # Người thắng ăn trọn tổng quỹ tiền cược (x2 tiền cược)
             total_pool = self.bet * 2
             update_user(winner_id, "balance", total_pool, mode="add")
 
@@ -1124,85 +1121,49 @@ class OanTuTiView(discord.ui.View):
             await self.message.edit(embed=embed_res)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Chỉ cho phép 2 người trong cuộc bấm nút
         if interaction.user.id not in [self.host.id, self.guest.id]:
             await interaction.response.send_message("❌ Bạn không phải là đấu thủ tham gia trận quyết đấu này!", ephemeral=True)
             return False
         return True
 
+    # SỬA LỖI NÚT BẤM: Tách biệt hoàn toàn phản hồi bấm nút và hàm xử lý kết quả chung
     @discord.ui.button(label="Kéo ✌️", style=discord.ButtonStyle.primary, custom_id="keo")
     async def keo_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
             return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        
         self.choices[interaction.user.id] = "keo"
+        # Phản hồi duy nhất cho interaction này
         await interaction.response.send_message("Bạn đã xuất chiêu: ✌️ Kéo! Vui lòng chờ đối thủ.", ephemeral=True)
-        await self.check_result(interaction)
+        
+        # Chạy kiểm tra kết quả độc lập, không truyền interaction sang nữa
+        await self.check_result()
 
     @discord.ui.button(label="Búa ✊", style=discord.ButtonStyle.success, custom_id="bua")
     async def bua_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
             return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        
         self.choices[interaction.user.id] = "bua"
         await interaction.response.send_message("Bạn đã xuất chiêu: ✊ Búa! Vui lòng chờ đối thủ.", ephemeral=True)
-        await self.check_result(interaction)
+        await self.check_result()
 
     @discord.ui.button(label="Bao 🖐️", style=discord.ButtonStyle.danger, custom_id="bao")
     async def bao_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.choices[interaction.user.id] is not None:
             return await interaction.response.send_message("❌ Bạn đã ra đòn rồi, không thể thay đổi chiêu thức!", ephemeral=True)
+        
         self.choices[interaction.user.id] = "bao"
         await interaction.response.send_message("Bạn đã xuất chiêu: 🖐️ Bao! Vui lòng chờ đối thủ.", ephemeral=True)
-        await self.check_result(interaction)
+        await self.check_result()
 
     async def on_timeout(self):
-        # Trả lại tiền cược gốc cho cả 2 người chơi nếu ván đấu bị treo quá hạn
         for p_id in [self.host.id, self.guest.id]:
             update_user(p_id, "balance", self.bet, mode="add")
         try:
-            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do võ sĩ bỏ dở trận đấu quá lâu! Tiền cược đã hoàn trả.**", embed=None, view=None)
+            await self.message.edit(content="🛑 **Trận đấu bị hủy bỏ do võ sĩ bỏ dở ván đấu quá lâu! Tiền cược đã được hoàn trả.**", embed=None, view=None)
         except:
             pass
-
-@bot.command(name="oantuti", aliases=["ott", "pqp"])
-async def oantuti(ctx, member: discord.Member = None, amount: str = None):
-    if not member or not amount:
-        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk oantuti @Tên_Bạn_Bè <số_tiền/all>`")
-        
-    if member.id == ctx.author.id: 
-        return await ctx.send("❌ Bạn không thể tự oẳn tù tì với chính mình!")
-    if member.bot: 
-        return await ctx.send("❌ Đối thủ phải là người chơi thực tế, không thể thách đấu Bot!")
-
-    # Lấy thông tin tài chính người thách đấu
-    u_host = get_user(ctx.author.id)
-    if not u_host:
-        return await ctx.send("❌ Dữ liệu tài khoản của bạn chưa được thiết lập!")
-        
-    bet = u_host["balance"] if amount.lower() == "all" else int(amount) if amount.isdigit() else 0
-    
-    if bet <= 0 or bet > u_host["balance"]: 
-        return await ctx.send("❌ Số tiền cược không hợp lệ hoặc ví của bạn không đủ số dư!")
-        
-    # Lấy thông tin tài chính đối thủ
-    u_guest = get_user(member.id)
-    if not u_guest or u_guest["balance"] < bet: 
-        return await ctx.send(f"❌ Đối thủ (**{member.name}**) không đủ số dư để theo mức cược này!")
-
-    # Đóng băng tiền cược của cả hai đấu thủ trước khi vào trận
-    update_user(ctx.author.id, "balance", -bet, mode="add")
-    update_user(member.id, "balance", -bet, mode="add")
-
-    embed_lobby = discord.Embed(
-        title="⚔️ ĐÀI ĐẤU OẲN TÙ TÌ SINH TỬ ⚔️",
-        description=f"🔥 **{ctx.author.mention}** đã dựng võ đài thách đấu **{member.mention}**!\n"
-                    f"💰 Mức cược ván đấu: **{bet:,} xu** mỗi người.\n\n"
-                    f"👇 *Hãy nhấn chọn đòn đánh kín của bạn dưới đây. Kết quả sẽ được lật mở khi cả hai bên đã chọn xong!*",
-        color=discord.Color.dark_magenta()
-    )
-    
-    view = OanTuTiView(ctx.author, member, bet)
-    msg = await ctx.send(embed=embed_lobby, view=view)
-    view.message = msg
 #---KHOBAU---
 class SuperTreasureView(discord.ui.View):
     def __init__(self, author, bet_amount):
@@ -1541,20 +1502,75 @@ async def dsgame(ctx):
     embed.add_field(name="🔥 VẬT PHẨM & TRƯỜNG ĐUA MULTIPLAYER", value=pvp_cmd, inline=False)
 
     # 5. KHU VỰC LỆNH ADMIN (Tự động ẩn/hiện)
-    if ctx.author.guild_permissions.administrator:
-        admin_cmd = (
-            "⚙️ `cgk add @người_chơi <số_tiền>` - Bơm thêm tiền cho người chơi.\n"
-            "*(Chỉ Quản trị viên mới nhìn thấy mục này)*"
-        )
-        embed.add_field(name="🛡️ LỆNH QUẢN TRỊ VIÊN", value=admin_cmd, inline=False)
+@bot.command(name="add")
+@commands.has_permissions(administrator=True) # Chỉ Admin mới được dùng
+async def add_money_multi(ctx, amount: str = None, *args):
+    # 1. Kiểm tra cú pháp cơ bản
+    if not amount or not args:
+        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk add <số_tiền> @Người_1 @Người_2 @Người_3...`")
 
-    # Footer trang trí dưới cùng
-    embed.set_footer(
-        text=f"Người gọi lệnh: {ctx.author.name} • Tiền tố bot: cgk", 
-        icon_url=ctx.author.avatar.url if ctx.author.avatar else None
+    # 2. Kiểm tra số tiền hợp lệ
+    if not amount.isdigit():
+        return await ctx.send("❌ Số tiền thêm vào phải là một số nguyên dương hợp lệ!")
+    
+    money_to_add = int(amount)
+    if money_to_add <= 0:
+        return await ctx.send("❌ Số tiền thêm vào phải lớn hơn 0!")
+
+    # 3. Lọc danh sách người dùng được tag từ nội dung tin nhắn (ctx.message.mentions)
+    targets = ctx.message.mentions
+    
+    if not targets:
+        return await ctx.send("❌ Bạn phải tag ít nhất một người chơi để cộng tiền!")
+
+    success_list = []
+    fail_list = []
+
+    # 4. Vòng lặp cập nhật database cho từng người một
+    for member in targets:
+        if member.bot:
+            fail_list.append(f"🤖 {member.name} (Bot)")
+            continue
+            
+        try:
+            # Gọi hàm database của bạn để cộng tiền
+            update_user(member.id, "balance", money_to_add, mode="add")
+            success_list.append(member.mention)
+        except Exception as e:
+            fail_list.append(f"❌ {member.name} (Lỗi hệ thống)")
+
+    # 5. Thiết kế Embed báo cáo kết quả tổng quan
+    embed_res = discord.Embed(
+        title="💰 NHÀ CÁI TỐI CAO 💰",
+        color=discord.Color.green(),
+        description=f"⚡ **Quản trị viên:** {ctx.author.mention} vừa thực hiện lệnh bơm tiền.\n"
+                    f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
     )
 
-    await ctx.send(embed=embed)
+    if success_list:
+        embed_res.add_field(
+            name=f"✅ Đã cộng tiền thành công ({len(success_list)} người)", 
+            value=", ".join(success_list), 
+            inline=False
+        )
+        
+    if fail_list:
+        embed_res.add_field(
+            name=f"⚠️ Thất bại ({len(fail_list)} tài khoản)", 
+            value=", ".join(fail_list), 
+            inline=False
+        )
+
+    embed_res.set_footer(text=f"Thao tác bởi: {ctx.author.name}")
+    await ctx.send(embed=embed_res)
+
+# Xử lý lỗi nếu người dùng không phải Admin cố tình gõ lệnh
+@add_money_multi.error
+async def add_money_multi_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Bạn không có quyền `Administrator` (Quản trị viên) để sử dụng lệnh tối cao này!")
+        
+        
     
 @bot.command(name="stats", aliases=["profile", "thongke", "me"])
 async def stats(ctx, member: discord.Member = None):
