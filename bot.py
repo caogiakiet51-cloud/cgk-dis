@@ -876,41 +876,42 @@ async def duangua(ctx, amount: str = None, horse_num: int = None):
 
         # VÒNG LẶP CHUYỂN ĐỘNG REAL-TIME
         while not finish:
-            # Ngẫu nhiên bước tiến từ 1 đến 2 ô để đường đua mượt, không bị quá nhanh
             for h in range(1, 5):
                 positions[h] += random.randint(1, 2)
                 if positions[h] >= track_length: 
                     finish = True
 
-            # Lấy con dẫn đầu và con đi cuối hiện tại để làm bình luận
             leading_horse = max(positions, key=positions.get)
             trailing_horse = min(positions, key=positions.get)
 
-            # Vẽ đồ họa đường đua mới
             lines = []
             for h in range(1, 5):
                 pos = min(positions[h], track_length)
-                
-                # Tạo vệt bụi phía sau ngựa, ô trống phía trước
                 trail = "▪️" * pos
                 dust = "💨" if pos > 0 and pos < track_length else ""
                 ahead = "▫️" * (track_length - pos)
-                
-                # Thay đổi emoji ngựa theo trạng thái về đích
                 horse_emoji = "🥇" if pos >= track_length else f"🐎{h}"
                 gate = "🚩" if pos >= track_length else "🏁"
-                
                 track_line = f"**[{h}]** {trail}{dust}{horse_emoji}{ahead} {gate}"
                 lines.append(track_line)
                 
             embed_race.description = "\n\n".join(lines)
-            
-            # Chọn ngẫu nhiên một câu bình luận thời gian thực cho sinh động
             cmt = random.choice(commentaries).format(leading=leading_horse, trailing=trailing_horse)
-            embed_race.set_field_at(0, name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False) if embed_race.fields else embed_race.add_field(name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False)
             
-            await race_msg.edit(embed=embed_race)
-            await asyncio.sleep(1.2) # Khoảng thời gian lý tưởng để không bị Discord rate limit (giật lag)
+            # CẬP NHẬT CÓ BẮT LỖI MẠNG
+            try:
+                if embed_race.fields:
+                    embed_race.set_field_at(0, name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False)
+                else:
+                    embed_race.add_field(name="🎙️ BÌNH LUẬN VIÊN:", value=f"*{cmt}*", inline=False)
+                
+                await race_msg.edit(embed=embed_race)
+            except Exception as e:
+                print(f"Lỗi mạng khi cập nhật đua ngựa: {e}")
+                # Nếu lỗi mạng, đợi 2s rồi thử lại
+                await asyncio.sleep(2)
+                
+            await asyncio.sleep(1.2)
 
         # -----------------------------------------------------------------
         # XỬ LÝ KẾT QUẢ VÀ TRẢ THƯỞNG 100% (Giữ nguyên logic sạch của bạn)
