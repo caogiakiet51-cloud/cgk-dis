@@ -1534,19 +1534,24 @@ async def give(ctx, member: discord.Member, amount: int):
     await ctx.send(f"✅ {ctx.author.mention} đã tặng **{amount:,} xu** cho {member.mention}!")
  
 #--- DSGAME ---
+# Thêm dòng này ở bất kỳ đâu phía trên (ngay sau dòng khai báo bot = commands.Bot) 
+# để vô hiệu hóa lệnh help mặc định của discord.py, tránh sập bot:
+bot.remove_command('help')
+
 @bot.command(name="dsgame", aliases=["help", "menu", "hd"])
 async def dsgame(ctx):
     # Tạo bảng Embed giao diện chính
     embed = discord.Embed(
-        title="🎰 TỔNG HỢP LỆNH HỆ THỐNG CASINO 🎰",
+        title=" 👑 TRUNG TÂM GIẢI TRÍ & SÒNG BẠC CAO CẤP CGK 🎰",
         description=f"Xin chào {ctx.author.mention}! Dưới đây là toàn bộ danh sách trò chơi và tính năng bạn có thể trải nghiệm.",
         color=discord.Color.gold()
     )
     
+    # Đặt ảnh của Bot làm ảnh nhỏ bên góc phải (Thumbnail)
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
 
-    # 1. KHU VỰC TÀI CHÍNH & CÁ NHÂN (Đã cập nhật lệnh stats chi tiết)
+    # 1. KHU VỰC TÀI CHÍNH & CÁ NHÂN
     economy_cmd = (
         "💳 `cgk cash` - Xem số dư tài khoản, Level và XP hiện tại.\n"
         "🎁 `cgk daily` - Điểm danh nhận xu và phần thưởng mỗi ngày.\n"
@@ -1558,13 +1563,17 @@ async def dsgame(ctx):
     )
     embed.add_field(name="🏦 HỆ THỐNG TÀI CHÍNH & HỒ SƠ", value=economy_cmd, inline=False)
 
-    # 2. KHU VỰC MINI-GAMES (CÁ CƯỢC NHANH)
+    # 2. KHU VỰC MINI-GAMES (CÁ CƯỢC NHANH - ĐÃ THÊM CÁCH CHƠI KHÔ BÁU VÀ OTT)
     minigame_cmd = (
         "🪙 `cgk cf <tiền> <tài/xỉu>` - Coinflip (Tung đồng xu may rủi).\n"
         "🎰 `cgk s <tiền/all>` - Quay Slots hoa quả nổ hũ x15.\n"
         "🎲 `cgk tx <tiền> <tài/xỉu>` - Đổ xúc xắc Tài Xỉu.\n"
         "🔢 `cgk cl <tiền> <chẵn/lẻ>` - Cược Chẵn Lẻ cơ bản.\n"
-        "🦀 `cgk bc <tiền> <vật_phẩm>` - Lắc Bầu Cua tôm cá."
+        "🦀 `cgk bc <tiền> <vật_phẩm>` - Lắc Bầu Cua tôm cá.\n\n"
+        "⚔️ **Oẳn Tù Tì PvP:** `cgk ott @Người_Chơi <số_tiền/all>`\n"
+        "👉 *Cách chơi:* Hai bên bấm nút ra đòn kín (Kéo/Búa/Bao). Thắng ăn trọn x2 quỹ cược.\n\n"
+        "🏴‍☠️ **Đảo Giấu Vàng:** `cgk khobau <số_tiền/all>`\n"
+        "👉 *Cách chơi:* Thử vận may bốc 5 loại rương cổ đại (Nhận ngẫu nhiên từ x0, x2, x3 tiền hoặc dính bẫy mất tiền)."
     )
     embed.add_field(name="🎲 MINI GAMES GIẢI TRÍ", value=minigame_cmd, inline=False)
 
@@ -1594,8 +1603,13 @@ async def dsgame(ctx):
     )
     embed.add_field(name="🔥 VẬT PHẨM & TRƯỜNG ĐUA MULTIPLAYER", value=pvp_cmd, inline=False)
 
-        
-        
+    # Cài đặt thông tin người gọi lệnh ở Chân trang (Footer)
+    if ctx.author.avatar:
+        embed.set_footer(text=f"Yêu cầu bởi {ctx.author.name} • Chúc bạn may mắn phát tài!", icon_url=ctx.author.avatar.url)
+    else:
+        embed.set_footer(text=f"Yêu cầu bởi {ctx.author.name} • Chúc bạn may mắn phát tài!")
+
+    await ctx.send(embed=embed)
     
 @bot.command(name="stats", aliases=["profile", "thongke", "me"])
 async def stats(ctx, member: discord.Member = None):
