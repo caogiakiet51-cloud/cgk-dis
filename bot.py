@@ -159,7 +159,75 @@ async def add_money(ctx, member: discord.Member = None, amount: int = None):
         return
     update_user(member.id, "balance", amount, mode="add")
     await ctx.send(f"👑 **Nhà Cái Tối Cao** đã bơm **+{amount:,}** xu vào ví của {member.mention}!")
+
+@bot.command(name="add")
+@commands.has_permissions(administrator=True) # Chỉ Admin mới được dùng
+async def add_money_multi(ctx, amount: str = None, *args):
+    # 1. Kiểm tra cú pháp cơ bản
+    if not amount or not args:
+        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk add <số_tiền> @Người_1 @Người_2 @Người_3...`")
+
+    # 2. Kiểm tra số tiền hợp lệ
+    if not amount.isdigit():
+        return await ctx.send("❌ Số tiền thêm vào phải là một số nguyên dương hợp lệ!")
     
+    money_to_add = int(amount)
+    if money_to_add <= 0:
+        return await ctx.send("❌ Số tiền thêm vào phải lớn hơn 0!")
+
+    # 3. Lọc danh sách người dùng được tag từ nội dung tin nhắn (ctx.message.mentions)
+    targets = ctx.message.mentions
+    
+    if not targets:
+        return await ctx.send("❌ Bạn phải tag ít nhất một người chơi để cộng tiền!")
+
+    success_list = []
+    fail_list = []
+
+    # 4. Vòng lặp cập nhật database cho từng người một
+    for member in targets:
+        if member.bot:
+            fail_list.append(f"🤖 {member.name} (Bot)")
+            continue
+            
+        try:
+            # Gọi hàm database của bạn để cộng tiền
+            update_user(member.id, "balance", money_to_add, mode="add")
+            success_list.append(member.mention)
+        except Exception as e:
+            fail_list.append(f"❌ {member.name} (Lỗi hệ thống)")
+
+    # 5. Thiết kế Embed báo cáo kết quả tổng quan
+    embed_res = discord.Embed(
+        title="👑 NHÀ CÁI TỐI CAO 👑",
+        color=discord.Color.green(),
+        description=f"⚡ **Quản trị viên:** {ctx.author.mention} vừa thực hiện lệnh bơm tiền.\n"
+                    f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
+    )
+
+    if success_list:
+        embed_res.add_field(
+            name=f"✅ Đã cộng tiền thành công ({len(success_list)} người)", 
+            value=", ".join(success_list), 
+            inline=False
+        )
+        
+    if fail_list:
+        embed_res.add_field(
+            name=f"⚠️ Thất bại ({len(fail_list)} tài khoản)", 
+            value=", ".join(fail_list), 
+            inline=False
+        )
+
+    embed_res.set_footer(text=f"Thao tác bởi: {ctx.author.name}")
+    await ctx.send(embed=embed_res)
+
+# Xử lý lỗi nếu người dùng không phải Admin cố tình gõ lệnh
+@add_money_multi.error
+async def add_money_multi_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Bạn không có quyền `Administrator` (Quản trị viên) để sử dụng lệnh tối cao này!")
+
 def check_level_up(uid):
     db = load_db()
     uid = str(uid)
@@ -1501,74 +1569,6 @@ async def dsgame(ctx):
     )
     embed.add_field(name="🔥 VẬT PHẨM & TRƯỜNG ĐUA MULTIPLAYER", value=pvp_cmd, inline=False)
 
-    # 5. KHU VỰC LỆNH ADMIN (Tự động ẩn/hiện)
-@bot.command(name="add")
-@commands.has_permissions(administrator=True) # Chỉ Admin mới được dùng
-async def add_money_multi(ctx, amount: str = None, *args):
-    # 1. Kiểm tra cú pháp cơ bản
-    if not amount or not args:
-        return await ctx.send("❌ **Cú pháp chuẩn:** `cgk add <số_tiền> @Người_1 @Người_2 @Người_3...`")
-
-    # 2. Kiểm tra số tiền hợp lệ
-    if not amount.isdigit():
-        return await ctx.send("❌ Số tiền thêm vào phải là một số nguyên dương hợp lệ!")
-    
-    money_to_add = int(amount)
-    if money_to_add <= 0:
-        return await ctx.send("❌ Số tiền thêm vào phải lớn hơn 0!")
-
-    # 3. Lọc danh sách người dùng được tag từ nội dung tin nhắn (ctx.message.mentions)
-    targets = ctx.message.mentions
-    
-    if not targets:
-        return await ctx.send("❌ Bạn phải tag ít nhất một người chơi để cộng tiền!")
-
-    success_list = []
-    fail_list = []
-
-    # 4. Vòng lặp cập nhật database cho từng người một
-    for member in targets:
-        if member.bot:
-            fail_list.append(f"🤖 {member.name} (Bot)")
-            continue
-            
-        try:
-            # Gọi hàm database của bạn để cộng tiền
-            update_user(member.id, "balance", money_to_add, mode="add")
-            success_list.append(member.mention)
-        except Exception as e:
-            fail_list.append(f"❌ {member.name} (Lỗi hệ thống)")
-
-    # 5. Thiết kế Embed báo cáo kết quả tổng quan
-    embed_res = discord.Embed(
-        title="💰 NHÀ CÁI TỐI CAO 💰",
-        color=discord.Color.green(),
-        description=f"⚡ **Quản trị viên:** {ctx.author.mention} vừa thực hiện lệnh bơm tiền.\n"
-                    f"💵 **Số tiền mỗi người nhận:** `+{money_to_add:,}` xu"
-    )
-
-    if success_list:
-        embed_res.add_field(
-            name=f"✅ Đã cộng tiền thành công ({len(success_list)} người)", 
-            value=", ".join(success_list), 
-            inline=False
-        )
-        
-    if fail_list:
-        embed_res.add_field(
-            name=f"⚠️ Thất bại ({len(fail_list)} tài khoản)", 
-            value=", ".join(fail_list), 
-            inline=False
-        )
-
-    embed_res.set_footer(text=f"Thao tác bởi: {ctx.author.name}")
-    await ctx.send(embed=embed_res)
-
-# Xử lý lỗi nếu người dùng không phải Admin cố tình gõ lệnh
-@add_money_multi.error
-async def add_money_multi_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bạn không có quyền `Administrator` (Quản trị viên) để sử dụng lệnh tối cao này!")
         
         
     
