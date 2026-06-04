@@ -620,26 +620,27 @@ async def open_crate(ctx):
 
 # ---BCR---
 @bot.command(name="bcr", aliases=["baccarat", "bac"])
-async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None, choice2: str = None):
-    # --- BƯỚC 1: KIỂM TRA CÚ PHÁP BAN ĐẦU ---
-    if not amount1 or not choice1:
+async def bcr(ctx, *args):
+    # --- BƯỚC 1: KIỂM TRA CÚ PHÁP ĐẦU VÀO TỰ ĐỘNG ---
+    # args sẽ gom toàn bộ chữ người chơi gõ thành 1 danh sách.
+    # Nếu người chơi không gõ gì, hoặc gõ lẻ từ (VD: 1000 con 500) -> Báo lỗi
+    if not args or len(args) % 2 != 0:
         msg = (
             "❌ **Cú pháp lệnh không đúng!**\n"
-            "👉 **Cược đơn:** `cgk bcr <số_tiền> <cửa>`\n"
-            "👉 **Cược kép (Cả cửa chính & cửa đôi):** `cgk bcr <tiền_1> <cửa_1> <tiền_2> <cửa_2>`\n\n"
-            "**Các cửa cược hợp lệ:**\n"
-            "• `con` / `cai` / `hoa`\n"
-            "• `condoi` / `caidoi`\n\n"
-            "Ví dụ: `cgk bcr 5000 con 1000 condoi`"
+            "👉 **Cách cược:** `cgk bcr <tiền> <cửa> <tiền> <cửa>...`\n"
+            "*(Bạn có thể cược bao nhiêu cửa cùng lúc tùy thích)*\n\n"
+            "**Các cửa cược hợp lệ:** `con`, `cai`, `hoa`, `condoi`, `caidoi`\n"
+            "Ví dụ 1 cửa: `cgk bcr 5000 con`\n"
+            "Ví dụ 3 cửa: `cgk bcr 1000 con 1000 hoa 1000 condoi`"
         )
         await ctx.send(msg)
         return
 
     u = get_user(ctx.author.id)
     total_bet = 0
-    bets = {} # Lưu thông tin các cửa đặt và số tiền tương ứng
+    bets = {} # Lưu danh sách các cửa và tiền cược
 
-    # Hàm chuẩn hóa tên cửa cược
+    # Hàm chuẩn hóa tên cửa
     def clean_choice(c):
         c = c.lower()
         if c in ["cái", "cai", "b"]: return "cai"
@@ -649,40 +650,32 @@ async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None
         if c in ["cáidôi", "caidôi", "caidoi"]: return "caidoi"
         return None
 
-    # --- XỬ LÝ CỬA CƯỢC THỨ 1 ---
-    c1 = clean_choice(choice1)
-    if not c1:
-        return await ctx.send(f"❌ Cửa cược `{choice1}` không hợp lệ!")
+    # Tự động quét từng cặp (Tiền - Cửa) mà người chơi nhập vào
+    for i in range(0, len(args), 2):
+        amt_str = args[i]
+        choice_str = args[i+1]
         
-    if amount1.lower() == "all":
-        bet1 = u["balance"]
-    else:
-        try: bet1 = int(amount1)
-        except ValueError: return await ctx.send("❌ Số tiền cược 1 phải là số nguyên!")
-        
-    if bet1 <= 0: return await ctx.send("❌ Số tiền cược phải lớn hơn 0!")
-    bets[c1] = bet1
-    total_bet += bet1
-
-    # --- XỬ LÝ CỬA CƯỢC THỨ 2 (NẾU CÓ) ---
-    if amount2 and choice2:
-        c2 = clean_choice(choice2)
-        if not c2:
-            return await ctx.send(f"❌ Cửa cược `{choice2}` không hợp lệ!")
+        c = clean_choice(choice_str)
+        if not c:
+            return await ctx.send(f"❌ Cửa cược `{choice_str}` không hợp lệ!")
             
-        if c1 == c2:
-            return await ctx.send("❌ Bạn không thể đặt trùng một cửa 2 lần trong một lượt!")
+        if c in bets:
+            return await ctx.send(f"❌ Bạn không thể đặt trùng cửa **{c.upper()}** 2 lần trong một ván!")
             
-        try: bet2 = int(amount2)
-        except ValueError: return await ctx.send("❌ Số tiền cược 2 phải là số nguyên!")
+        if amt_str.lower() == "all":
+            bet_amt = u["balance"]
+        else:
+            try: bet_amt = int(amt_str)
+            except ValueError: return await ctx.send(f"❌ Số tiền `{amt_str}` không hợp lệ!")
+            
+        if bet_amt <= 0: return await ctx.send("❌ Số tiền cược phải lớn hơn 0!")
         
-        if bet2 <= 0: return await ctx.send("❌ Số tiền cược phải lớn hơn 0!")
-        bets[c2] = bet2
-        total_bet += bet2
+        bets[c] = bet_amt
+        total_bet += bet_amt
 
-    # Kiểm tra tổng tiền có đủ tài khoản không
+    # Kiểm tra tổng tiền cược tất cả các cửa có đủ không
     if total_bet > u["balance"]:
-        return await ctx.send(f"❌ Bạn không đủ tiền! Tổng tiền cược của bạn là **{total_bet:,} xu**, nhưng bạn chỉ có **{u['balance']:,} xu**.")
+        return await ctx.send(f"❌ Không đủ tiền! Tổng tiền bạn đang cược là **{total_bet:,} xu**, nhưng bạn chỉ có **{u['balance']:,} xu**.")
 
     # Trừ tổng tiền cược ngay từ đầu ván
     update_user(ctx.author.id, "balance", -total_bet, mode="add")
@@ -737,7 +730,7 @@ async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None
     embed = discord.Embed(title="🃏 CASINO BACCARAT 🃏", color=discord.Color.blue())
     embed.add_field(name="🧑 PLAYER (Con)", value="Bài: ` 🎴 | 🎴 `\nĐiểm: **?**", inline=True)
     embed.add_field(name="🏢 BANKER (Cái)", value="Bài: ` 🎴 | 🎴 `\nĐiểm: **?**", inline=True)
-    embed.add_field(name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Đang chia bài...", inline=False)
+    embed.add_field(name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Đang xóc và chia bài...", inline=False)
     msg = await ctx.send(embed=embed)
 
     await asyncio.sleep(0.6)
@@ -779,7 +772,7 @@ async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None
     win_money = 0
     detail_msg = []
 
-    # Kiểm tra từng cửa trong danh sách cược của người chơi
+    # Duyệt qua tất cả các cửa mà người chơi đã đặt
     for door, bet_amt in bets.items():
         is_door_win = False
         mul = 0
@@ -797,16 +790,16 @@ async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None
         else:
             detail_msg.append(f"❌ Thua cửa **{door.upper()}**: -{bet_amt:,} xu")
 
-    # Xử lý biến động tài sản cuối cùng
+    # Xử lý tổng lợi nhuận (Tiền thu về trừ đi tiền vốn)
     net_profit = win_money - total_bet
     if win_money > 0:
         update_user(ctx.author.id, "balance", win_money, mode="add")
         
     if net_profit > 0:
-        status_msg = f"🎉 **BẠN ĐÃ THẮNG CHUNG CUỘC!** Lời **+{net_profit:,} xu**."
+        status_msg = f"🎉 **BẠN ĐÃ LỜI CHUNG CUỘC!** (+{net_profit:,} xu)."
         embed.color = discord.Color.green()
     elif net_profit < 0:
-        status_msg = f"💸 **BẠN ĐÃ THUA CHUNG CUỘC!** Lỗ **{net_profit:,} xu**."
+        status_msg = f"💸 **BẠN ĐÃ LỖ CHUNG CUỘC!** ({net_profit:,} xu)."
         embed.color = discord.Color.red()
     else:
         status_msg = "⚖️ **HÒA VỐN!** Không tăng không giảm số dư."
@@ -818,15 +811,15 @@ async def bcr(ctx, amount1: str = None, choice1: str = None, amount2: str = None
     if is_player_pair: win_doors.append("ĐÔI CON (CONDOI)")
     if is_banker_pair: win_doors.append("ĐÔI CÁI (CAIDOI)")
 
-    # Hiển thị chi tiết từng cửa đặt
+    # In ra bill chi tiết từng cửa đặt
     history_str = "\n".join(detail_msg)
-    embed.set_field_at(2, name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Cửa xuất hiện: **{', '.join(win_doors)}**\n\n{history_str}\n\n**Kết luận:** {status_msg}", inline=False)
+    embed.set_field_at(2, name="📊 KẾT QUẢ TRẬN ĐẤU", value=f"Cửa xuất hiện: **{', '.join(win_doors)}**\n\n**Chi tiết cược:**\n{history_str}\n\n**Kết luận:** {status_msg}", inline=False)
     
     if is_up:
         embed.set_footer(text=f"🎉 Xuất sắc! Bạn đã thăng cấp lên Level {lvl}!")
         
     await msg.edit(embed=embed)
-
+    
 # --- [10] HỆ THỐNG MỞ HÒM THÚ CƯNG (LOOTBOX) ---
 @bot.command(name="lootbox")
 async def open_lootbox(ctx):
