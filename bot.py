@@ -322,7 +322,7 @@ async def slots(ctx, amount: str = None):
     # Các lựa chọn có thể xảy ra
     options = ["LOSE", "🍎", "🍇", "🍊", "🥭", "💎"]
     # Tỷ lệ phần trăm tương ứng (Tổng = 100)
-    weights = [40, 25, 15, 10, 8, 2]
+    weights = [55, 20, 12, 8, 4, 1]
     
     # Bot quay chọn ngẫu nhiên 1 kết quả dựa trên tỷ lệ trên
     final_outcome = random.choices(options, weights=weights, k=1)[0]
